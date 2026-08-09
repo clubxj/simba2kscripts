@@ -1,6 +1,7 @@
 //!PACKAGE HERB_CLEANER
 {$DEFINE WL_DISABLE_FAKE_INPUT}
 {$I WaspLib/main.simba}
+{$I item_finder.simba}
 
 const
   GRIMY_HERBS: TItemArray = [

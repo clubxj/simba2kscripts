@@ -1,0 +1,48 @@
+type
+  TRSItemFinderMatch = record
+    Match: TImageMatch;
+    Item: TItem;
+  end;
+
+  TRSItemFinderMatchArray = array of TRSItemFinderMatch;
+
+function TItemFinder.FindAll(items: TItemArray; boxes: TBoxArray; out matches: TRSItemFinderMatchArray): Boolean; overload;
+var
+  item: TItem;
+  results: TRSItemFinderMatchArray;
+  i: Integer;
+  img: TImage;
+  match: Single;
+  skip: TBooleanArray;
+begin
+  SetLength(skip, Length(boxes));
+
+  for item in items do
+  begin
+    item := LowerCase(item);
+    Self.ImageCompare.Filter := @Self.GetFilter(item);
+
+    for img in Self.GetImages(item) do
+      for i := 0 to High(boxes) do
+      begin
+        if skip[i] then Continue;
+        if not TItem.InBounds(boxes[i]) then
+        begin
+          skip[i] := True;
+          Continue;
+        end;
+
+        match := Self.Similarity;
+        if Self.ImageCompare.Compare(img, boxes[i], match) then
+        begin
+          results += [[i, boxes[i], match], item];
+          skip[i] := True;
+        end;
+      end;
+
+    matches += results;
+    results := [];
+  end;
+
+  Result := matches.Length > 0;
+end;
