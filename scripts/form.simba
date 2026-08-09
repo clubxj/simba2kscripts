@@ -1,0 +1,14 @@
+type
+  THerbCleanerForm = record
+    Form: TScriptForm;
+    MaxRuntimeEdit: TLazEdit;
+  end;
+
+procedure THerbCleanerForm.CreateSettingsTab();
+var
+  tab: TLazTabSheet;
+begin
+  tab := Self.Form.CreateTab('Settings');
+
+  Self.MaxRuntimeEdit := TLazEdit.CreateEx(tab, 'Max runtime', '', 50, 20, 100, 20);
+end;
