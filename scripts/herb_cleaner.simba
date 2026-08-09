@@ -49,18 +49,14 @@ var
   herbs: TIntegerArray;
 begin
   if not Bank.IsOpen() then
-  begin
-    Bank.Open(True);
-    SleepUntil(Bank.IsOpen, 50, 5000);
     Exit;
-  end;
 
-  if Inventory.Slots.CountEmpty() < (28 - Length(Bank.GetLockedSlots())) then
+  if Inventory.Slots.CountEmpty() < (28 - Bank.GetLockedSlots().Length) then
     Exit(EAction.DEPOSIT_ITEMS);
 
   herbs := Bank.Items.IndicesOf(GRIMY_HERBS);
 
-  if herbs = [] then
+  if herbs.IsEmpty() then
     Result := EAction.FIND_HERBS
   else
     Result := EAction.WITHDRAW_HERBS;
@@ -80,7 +76,7 @@ begin
     Exit(EAction.DEPOSIT_ITEMS);
 
   herbIndices := Bank.Items.IndicesOf(GRIMY_HERBS);
-  if Length(herbIndices) = 0 then
+  if herbIndices.IsEmpty() then
   begin
     Self.TerminateReason := 'No grimy herbs left in bank';
     Exit(EAction.END_SCRIPT);
@@ -120,7 +116,7 @@ begin
   end;
 
   herbSlots := Inventory.Items.IndicesOf(GRIMY_HERBS);
-  if Length(herbSlots) = 0 then
+  if herbSlots.IsEmpty() then
     Exit(EAction.OPEN_BANK);
 
   for i in herbSlots do
