@@ -64,27 +64,20 @@ end;
 
 function TBot.Action_WithdrawHerbs(): EAction;
 var
-  herbIndices: TIntegerArray;
+  available, count: Integer;
+  herbs: TIntegerArray;
 begin
-  if not Bank.IsOpen() then
-    Exit(EAction.OPEN_BANK);
+  available := Inventory.Slots.CountEmpty();
+  herbs := Bank.Items.IndicesOf(GRIMY_HERBS);
+  count := Bank.Slots.ReadStack(herbs.First);
 
-  if Inventory.Items.ContainsAny(GRIMY_HERBS) then
-    Exit(EAction.CLOSE_BANK);
-
-  if Inventory.Slots.Count() > 0 then
-    Exit(EAction.DEPOSIT_ITEMS);
-
-  herbIndices := Bank.Items.IndicesOf(GRIMY_HERBS);
-  if herbIndices.IsEmpty() then
+  if Bank.Items.Interact(herbs.First, 'Withdraw-All') then
   begin
-    Self.TerminateReason := 'No grimy herbs left in bank';
-    Exit(EAction.END_SCRIPT);
+    if count >= available then
+      Result := EAction.CLOSE_BANK
+    else
+      Result := EAction.WITHDRAW_HERBS;
   end;
-
-  Bank.Items.Interact(herbIndices[0], 'Withdraw-All');
-  Sleep(500, 1000);
-  Result := EAction.WITHDRAW_HERBS;
 end;
 
 function TBot.Action_FindHerbs(): EAction;
