@@ -88,10 +88,8 @@ end;
 
 function TBot.Action_CloseBank(): EAction;
 begin
-  if Bank.IsOpen() then
-    Bank.Close();
-  Sleep(500, 800);
-  Result := EAction.CLEAN_HERBS;
+  if Bank.Close() then
+    Result := EAction.CLEAN_HERBS;
 end;
 
 function TBot.Action_CleanHerbs(): EAction;
