@@ -23,7 +23,7 @@ type
     OPEN_BANK,
     WITHDRAW_HERBS,
     FIND_HERBS,
-    CLOSE_BANK,
+    CLOSE_INTERFACE,
     CLEAN_HERBS,
     DEPOSIT_ITEMS,
     END_SCRIPT
@@ -45,6 +45,29 @@ end;
 
 function TBot.Action_Unknown(): EAction;
 begin
+  if not Client.IsLoggedIn() then
+    Exit(EAction.LOGIN);
+
+  if MSInterface.IsOpen() then
+  begin
+    if not Bank.IsOpen() then
+      Exit(EAction.CLOSE_INTERFACE);
+
+    if Inventory.Slots.CountEmpty() > 0 then
+      Exit(EAction.WITHDRAW_HERBS);
+
+    Exit(EAction.CLOSE_INTERFACE);
+  end;
+
+  if Inventory.Items.ContainsAny(GRIMY_HERBS) then
+    Exit(EAction.CLEAN_HERBS);
+
+  if Self.BankEmpty then
+  begin
+    Self.TerminateReason := 'No grimy herbs left in bank';
+    Exit(EAction.END_SCRIPT);
+  end;
+
   Result := EAction.OPEN_BANK;
 end;
 
@@ -83,7 +106,7 @@ begin
   if Bank.Items.Interact(herbs.First, 'Withdraw-All') then
   begin
     if count >= available then
-      Result := EAction.CLOSE_BANK
+      Result := EAction.CLOSE_INTERFACE
     else
       Result := EAction.WITHDRAW_HERBS;
   end;
@@ -102,7 +125,7 @@ begin
   if herbs.IsEmpty() then
   begin
     Self.BankEmpty := True;
-    Exit(EAction.CLOSE_BANK);
+    Exit(EAction.CLOSE_INTERFACE);
   end;
 
   bounds := [Bank.Bounds.X1 + 56, Bank.Bounds.Y1 + 77, Bank.Bounds.X1 + 84, Bank.Slots.Box(herbs.First).Y1];
@@ -127,7 +150,7 @@ begin
   if not Bank.Scroll.CanScroll() then
   begin
     Self.BankEmpty := True;
-    Exit(EAction.CLOSE_BANK);
+    Exit(EAction.CLOSE_INTERFACE);
   end;
 
   scroll := Bank.Scroll.GetLevel();
@@ -163,13 +186,13 @@ begin
   until not InRange(scroll, 1, 99);
 
   Self.BankEmpty := True;
-  Result := EAction.CLOSE_BANK;
+  Result := EAction.CLOSE_INTERFACE;
 end;
 
-function TBot.Action_CloseBank(): EAction;
+function TBot.Action_CloseInterface(): EAction;
 begin
-  if Bank.Close() then
-    Result := EAction.CLEAN_HERBS;
+  if MSInterface.Close() then
+    Result := EAction.UNKNOWN;
 end;
 
 function TBot.Action_CleanHerbs(): EAction;
@@ -209,7 +232,7 @@ begin
   Self.ActionHandlers[EAction.OPEN_BANK] := @Self.Action_OpenBank;
   Self.ActionHandlers[EAction.WITHDRAW_HERBS] := @Self.Action_WithdrawHerbs;
   Self.ActionHandlers[EAction.FIND_HERBS] := @Self.Action_FindHerbs;
-  Self.ActionHandlers[EAction.CLOSE_BANK] := @Self.Action_CloseBank;
+  Self.ActionHandlers[EAction.CLOSE_INTERFACE] := @Self.Action_CloseInterface;
   Self.ActionHandlers[EAction.CLEAN_HERBS] := @Self.Action_CleanHerbs;
   Self.ActionHandlers[EAction.DEPOSIT_ITEMS] := @Self.Action_DepositItems;
   Self.ActionHandlers[EAction.END_SCRIPT] := @Self.Action_EndScript;
