@@ -85,23 +85,63 @@ function TBot.Action_FindHerbs(): EAction;
 var
   data: TBankPosition;
   herb: TItem;
+  found: Boolean;
 begin
+  Bank.Search('grimy');
+
+  found := False;
   for herb in GRIMY_HERBS do
+    if Bank.Items.Find(herb, data.Slot) then
+    begin
+      found := True;
+      Break;
+    end;
+
+  if not found then
   begin
-    if not Bank.Find(herb, data) then
-      Continue;
+    Self.BankEmpty := True;
+    Exit(EAction.CLOSE_BANK);
+  end;
 
-    if not Bank.OpenTab(data.Tab) then
-      Exit;
+  if Bank.IsSearchOpen() then
+    Bank.CloseSearch();
 
-    if not InRange(Bank.Scroll.GetLevel() - data.Scroll, -5, 5) then
-      Bank.Scroll.SetLevel(data.Scroll);
+  data.Tab := Bank.FindTab(herb);
+  if data.Tab = -1 then
+  begin
+    Self.BankEmpty := True;
+    Exit(EAction.CLOSE_BANK);
+  end;
 
+  if not Bank.OpenTab(data.Tab) then
+    Exit;
+
+  if Bank.Items.Find(herb, data.Slot) then
+  begin
+    data.Scroll := Bank.Scroll.GetLevel();
     Exit(EAction.WITHDRAW_HERBS);
   end;
 
-  Self.BankEmpty := True;
-  Result := EAction.CLOSE_BANK;
+  data.Scroll := Bank.FindScroll(herb);
+  if data.Scroll = -1 then
+  begin
+    Self.BankEmpty := True;
+    Exit(EAction.CLOSE_BANK);
+  end;
+
+  if not Bank.Items.Find(herb, data.Slot) then
+  begin
+    Self.BankEmpty := True;
+    Exit(EAction.CLOSE_BANK);
+  end;
+
+  if not Bank.OpenTab(data.Tab) then
+    Exit;
+
+  if not InRange(Bank.Scroll.GetLevel() - data.Scroll, -5, 5) then
+    Bank.Scroll.SetLevel(data.Scroll);
+
+  Result := EAction.WITHDRAW_HERBS;
 end;
 
 function TBot.Action_CloseBank(): EAction;
