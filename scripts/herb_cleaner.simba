@@ -209,7 +209,15 @@ begin
     Self.NextSlot := 0;
 
   if Self.NextSlot = 0 then
+  begin
+    if Self.BankEmpty then
+    begin
+      Self.TerminateReason := 'No grimy herbs left in bank';
+      Exit(EAction.END_SCRIPT);
+    end;
+
     Exit(EAction.OPEN_BANK);
+  end;
 
   Result := EAction.CLEAN_HERBS;
 end;
@@ -238,15 +246,10 @@ begin
   Self.ActionHandlers[EAction.END_SCRIPT] := @Self.Action_EndScript;
 end;
 
-procedure TBot.SetupObjects();
-begin
-end;
-
 procedure TBot.Setup(Config: TConfigJSON);
 begin
   Logger.Setup('Herb Cleaner');
   Self.SetupActionHandlers();
-  Self.SetupObjects();
 
   if not Client.IsLoggedIn() then
     if not Login.DoLogin() then
