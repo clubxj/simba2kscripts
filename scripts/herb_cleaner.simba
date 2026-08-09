@@ -48,7 +48,7 @@ function TBot.Action_OpenBank(): EAction;
 var
   herbs: TIntegerArray;
 begin
-  if not Bank.IsOpen() then
+  if not Bank.Open() then
     Exit;
 
   if Inventory.Slots.CountEmpty() < (28 - Bank.GetLockedSlots().Length) then
