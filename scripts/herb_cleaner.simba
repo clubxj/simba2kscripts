@@ -9,7 +9,6 @@ const
     'Grimy cadantine', 'Grimy lantadyme', 'Grimy dwarf weed', 'Grimy torstol'
   ];
 
-  // 4x7 inventory: rows 0-1 column-wise, rows 2-3 LTR, rows 4-5 RTL, row 6 LTR.
   CLEAN_PATTERN: TIntegerArray = [
     0, 4, 1, 5, 2, 6, 3, 7,
     8, 9, 10, 11, 12, 13, 14, 15,
