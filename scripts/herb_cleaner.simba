@@ -193,7 +193,8 @@ end;
 
 function TBot.Action_DepositItems(): EAction;
 begin
-  Bank.DepositInventory();
+  if Bank.DepositInventory() then
+    Result := EAction.WITHDRAW_HERBS;
 end;
 
 function TBot.Action_EndScript(): EAction;
