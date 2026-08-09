@@ -23,3 +23,15 @@ begin
   Self.BankLocationCombo.Items.EndUpdate();
   Self.BankLocationCombo.ItemIndex := 0;
 end;
+
+procedure THerbCleanerForm.Setup(caption: String = 'Herb Cleaner'; configData: TJSONItem = nil);
+begin
+  Self.Form.Setup(caption, configData);
+  Self.CreateSettingsTab();
+  Self.Form.CreateAntibanTab();
+end;
+
+procedure THerbCleanerForm.Run();
+begin
+  Self.Form.Run();
+end;

@@ -1,6 +1,7 @@
 //!PACKAGE HERB_CLEANER
 {$DEFINE WL_DISABLE_FAKE_INPUT}
 {$I WaspLib/main.simba}
+{$I form.simba}
 
 const
   CLEAN_PATTERN: TIntegerArray = [
@@ -321,14 +322,14 @@ begin
 end;
 
 var
-  BotForm: TScriptForm;
+  Form: THerbCleanerForm;
   BotConfig: TConfigJSON;
   Bot: TBot;
 
 begin
   BotConfig.Setup('scripts' + PATH_SEP + 'herb-cleaner');
-  BotForm.Setup('Herb Cleaner', BotConfig.Data);
-  BotForm.Run();
+  Form.Setup('Herb Cleaner', BotConfig.Data);
+  Form.Run();
 
   Bot.Setup(BotConfig);
   Bot.Run();
