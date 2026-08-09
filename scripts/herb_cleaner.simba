@@ -1,0 +1,109 @@
+//!PACKAGE HERB_CLEANER
+(*
+  Base herb cleaner for Simba 2 + WaspLib.
+
+  Setup:
+    1. Set DIRTY_HERB / CLEAN_HERB to the herbs you want to clean.
+    2. Stand near a bank with grimy herbs in it.
+    3. Run the script while logged in.
+*)
+{$I WaspLib/main.simba}
+
+const
+  DIRTY_HERB: TItem = 'Grimy guam leaf';
+  CLEAN_HERB: TItem = 'Guam leaf';
+
+  // Delay between herb clicks (ms).
+  CLEAN_CLICK_WAIT: Integer = 50;
+
+type
+  EHerbCleanerState = (
+    CLEAN,
+    BANK,
+    END_SCRIPT
+  );
+
+  THerbCleaner = record
+    function GetState(): EHerbCleanerState;
+    procedure CleanHerbs();
+    procedure DoBank();
+    procedure Run();
+  end;
+
+function THerbCleaner.GetState(): EHerbCleanerState;
+begin
+  if not Client.IsLoggedIn() then
+    Exit(EHerbCleanerState.END_SCRIPT);
+
+  if Inventory.Items.Contains(DIRTY_HERB) then
+    Exit(EHerbCleanerState.CLEAN);
+
+  Exit(EHerbCleanerState.BANK);
+end;
+
+procedure THerbCleaner.CleanHerbs();
+begin
+  if Bank.IsOpen() then
+    Bank.Close();
+
+  if not Inventory.Open() then
+    Exit;
+
+  while Inventory.Items.Contains(DIRTY_HERB) do
+  begin
+    Inventory.Items.Click(DIRTY_HERB);
+    Sleep(CLEAN_CLICK_WAIT, CLEAN_CLICK_WAIT * 3);
+  end;
+end;
+
+procedure THerbCleaner.DoBank();
+begin
+  if not Bank.IsOpen() and not Bank.Open() then
+    Exit;
+
+  if Inventory.Slots.Count() > 0 then
+    Bank.DepositInventory();
+
+  if not Bank.Withdraw(DIRTY_HERB.ToBankItem(QUANTITY_ALL)) then
+  begin
+    WriteLn('No more grimy herbs in bank (or withdraw failed).');
+    TerminateScript();
+    Exit;
+  end;
+
+  Bank.Close();
+end;
+
+procedure THerbCleaner.Run();
+var
+  state: EHerbCleanerState;
+begin
+  WriteLn('Herb cleaner started: ', DIRTY_HERB, ' -> ', CLEAN_HERB);
+
+  if not Client.IsLoggedIn() then
+  begin
+    WriteLn('Log in before starting.');
+    Exit;
+  end;
+
+  repeat
+    state := Self.GetState();
+
+    case state of
+      EHerbCleanerState.CLEAN: Self.CleanHerbs();
+      EHerbCleanerState.BANK: Self.DoBank();
+      EHerbCleanerState.END_SCRIPT: Break;
+    end;
+
+    Sleep(100, 300);
+  until False;
+
+  WriteLn('Herb cleaner stopped.');
+end;
+
+var
+  HerbCleaner: THerbCleaner;
+
+begin
+  HerbCleaner.Run();
+end.
