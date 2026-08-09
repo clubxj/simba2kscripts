@@ -1,7 +1,6 @@
 //!PACKAGE HERB_CLEANER
 {$DEFINE WL_DISABLE_FAKE_INPUT}
 {$I WaspLib/main.simba}
-{$I item_finder.simba}
 
 const
   GRIMY_HERBS: TItemArray = [
@@ -84,22 +83,21 @@ end;
 
 function TBot.Action_FindHerbs(): EAction;
 var
-  matches: TRSItemFinderMatchArray;
-  hit: TRSItemFinderMatch;
+  herbs: TIntegerArray;
   bounds: TBox;
-  tab, scroll: Integer;
+  tab, scroll, next: Integer;
+  down: Boolean;
 begin
   Bank.Search('grimy');
 
-  if not ItemFinder.FindAll(GRIMY_HERBS, Bank.Slots.Boxes(), matches) then
+  herbs := Bank.Items.IndicesOf(GRIMY_HERBS);
+  if herbs.IsEmpty() then
   begin
     Self.BankEmpty := True;
     Exit(EAction.CLOSE_BANK);
   end;
 
-  hit := matches.First;
-
-  bounds := [Bank.Bounds.X1 + 56, Bank.Bounds.Y1 + 77, Bank.Bounds.X1 + 84, hit.Match.Box.Y1];
+  bounds := [Bank.Bounds.X1 + 56, Bank.Bounds.Y1 + 77, Bank.Bounds.X1 + 84, Bank.Slots.Box(herbs.First).Y1];
   tab := 0;
   if bounds.Height >= 8 then
   begin
@@ -118,14 +116,46 @@ begin
   if Bank.Items.ContainsAny(GRIMY_HERBS) then
     Exit(EAction.WITHDRAW_HERBS);
 
-  scroll := Bank.FindScroll(hit.Item);
-  if (scroll = -1) or not Bank.Items.ContainsAny(GRIMY_HERBS) then
+  if not Bank.Scroll.CanScroll() then
   begin
     Self.BankEmpty := True;
     Exit(EAction.CLOSE_BANK);
   end;
 
-  Result := EAction.WITHDRAW_HERBS;
+  scroll := Bank.Scroll.GetLevel();
+  down := (scroll > 0) or RandomBoolean(0.5);
+
+  repeat
+    if down then
+      next := scroll - 5
+    else
+      next := scroll + 5;
+
+    scroll := Bank.Scroll.SetLevel(next);
+    if Bank.Items.ContainsAny(GRIMY_HERBS) then
+      Exit(EAction.WITHDRAW_HERBS);
+
+    if not Bank.IsOpen() then
+      Exit;
+  until not InRange(scroll, 1, 99);
+
+  down := not down;
+  repeat
+    if down then
+      next := scroll - 5
+    else
+      next := scroll + 5;
+
+    scroll := Bank.Scroll.SetLevel(next);
+    if Bank.Items.ContainsAny(GRIMY_HERBS) then
+      Exit(EAction.WITHDRAW_HERBS);
+
+    if not Bank.IsOpen() then
+      Exit;
+  until not InRange(scroll, 1, 99);
+
+  Self.BankEmpty := True;
+  Result := EAction.CLOSE_BANK;
 end;
 
 function TBot.Action_CloseBank(): EAction;
