@@ -26,20 +26,6 @@ type
     ActionHandlers: array[EAction] of function(): EAction of object;
     Inactivity: TCountDown;
     Runtime: TStopWatch;
-
-    procedure DebugLn(fmt: String; args: TVariantArray = []);
-    function Action_Unknown(): EAction;
-    function Action_Login(): EAction;
-    function Action_OpenBank(): EAction;
-    function Action_WithdrawHerbs(): EAction;
-    function Action_CloseBank(): EAction;
-    function Action_CleanHerbs(): EAction;
-    function Action_DepositItems(): EAction;
-    function Action_EndScript(): EAction;
-    procedure SetupActionHandlers();
-    procedure SetupObjects();
-    procedure Setup(Config: TConfigJSON);
-    procedure Run();
   end;
 
 procedure TBot.DebugLn(fmt: String; args: TVariantArray);
