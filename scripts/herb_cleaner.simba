@@ -24,6 +24,7 @@ type
 
   TBot = record
     TerminateReason: String;
+    BankEmpty: Boolean;
     ActionHandlers: array[EAction] of function(): EAction of object;
     Inactivity: TCountDown;
     Runtime: TStopWatch;
@@ -81,9 +82,26 @@ begin
 end;
 
 function TBot.Action_FindHerbs(): EAction;
+var
+  data: TBankPosition;
+  herb: TItem;
 begin
-  Self.TerminateReason := 'No grimy herbs left in bank';
-  Result := EAction.END_SCRIPT;
+  for herb in GRIMY_HERBS do
+  begin
+    if not Bank.Find(herb, data) then
+      Continue;
+
+    if not Bank.OpenTab(data.Tab) then
+      Exit;
+
+    if not InRange(Bank.Scroll.GetLevel() - data.Scroll, -5, 5) then
+      Bank.Scroll.SetLevel(data.Scroll);
+
+    Exit(EAction.WITHDRAW_HERBS);
+  end;
+
+  Self.BankEmpty := True;
+  Result := EAction.CLOSE_BANK;
 end;
 
 function TBot.Action_CloseBank(): EAction;
