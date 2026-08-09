@@ -165,7 +165,6 @@ end;
 
 procedure TBot.SetupObjects();
 begin
-  // Setup objects if necessary
 end;
 
 procedure TBot.Setup(Config: TConfigJSON);
