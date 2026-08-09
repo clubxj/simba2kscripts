@@ -15,6 +15,7 @@ type
     LOGIN,
     OPEN_BANK,
     WITHDRAW_HERBS,
+    FIND_HERBS,
     CLOSE_BANK,
     CLEAN_HERBS,
     DEPOSIT_ITEMS,
@@ -44,13 +45,24 @@ begin
 end;
 
 function TBot.Action_OpenBank(): EAction;
+var
+  herbs: TIntegerArray;
 begin
   if not Bank.IsOpen() then
   begin
     Bank.Open(True);
     SleepUntil(Bank.IsOpen, 50, 5000);
-    Result := EAction.OPEN_BANK;
-  end else
+    Exit;
+  end;
+
+  if Inventory.Slots.CountEmpty() < (28 - Length(Bank.GetLockedSlots())) then
+    Exit(EAction.DEPOSIT_ITEMS);
+
+  herbs := Bank.Items.IndicesOf(GRIMY_HERBS);
+
+  if herbs = [] then
+    Result := EAction.FIND_HERBS
+  else
     Result := EAction.WITHDRAW_HERBS;
 end;
 
@@ -77,6 +89,12 @@ begin
   Bank.Items.Interact(herbIndices[0], 'Withdraw-All');
   Sleep(500, 1000);
   Result := EAction.WITHDRAW_HERBS;
+end;
+
+function TBot.Action_FindHerbs(): EAction;
+begin
+  Self.TerminateReason := 'No grimy herbs left in bank';
+  Result := EAction.END_SCRIPT;
 end;
 
 function TBot.Action_CloseBank(): EAction;
@@ -135,6 +153,7 @@ begin
   Self.ActionHandlers[EAction.LOGIN] := @Self.Action_Login;
   Self.ActionHandlers[EAction.OPEN_BANK] := @Self.Action_OpenBank;
   Self.ActionHandlers[EAction.WITHDRAW_HERBS] := @Self.Action_WithdrawHerbs;
+  Self.ActionHandlers[EAction.FIND_HERBS] := @Self.Action_FindHerbs;
   Self.ActionHandlers[EAction.CLOSE_BANK] := @Self.Action_CloseBank;
   Self.ActionHandlers[EAction.CLEAN_HERBS] := @Self.Action_CleanHerbs;
   Self.ActionHandlers[EAction.DEPOSIT_ITEMS] := @Self.Action_DepositItems;
