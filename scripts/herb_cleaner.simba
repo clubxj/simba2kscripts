@@ -1,109 +1,230 @@
 //!PACKAGE HERB_CLEANER
-(*
-  Base herb cleaner for Simba 2 + WaspLib.
-
-  Setup:
-    1. Set DIRTY_HERB / CLEAN_HERB to the herbs you want to clean.
-    2. Stand near a bank with grimy herbs in it.
-    3. Run the script while logged in.
-*)
+{$DEFINE WL_DISABLE_FAKE_INPUT}
 {$I WaspLib/main.simba}
 
 const
-  DIRTY_HERB: TItem = 'Grimy guam leaf';
-  CLEAN_HERB: TItem = 'Guam leaf';
-
-  // Delay between herb clicks (ms).
-  CLEAN_CLICK_WAIT: Integer = 50;
+  GRIMY_HERBS: TItemArray = [
+    'Grimy guam leaf', 'Grimy marrentill', 'Grimy tarromin', 'Grimy harralander', 'Grimy ranarr weed',
+    'Grimy toadflax', 'Grimy irit leaf', 'Grimy avantoe', 'Grimy kwuarm', 'Grimy snapdragon',
+    'Grimy cadantine', 'Grimy lantadyme', 'Grimy dwarf weed', 'Grimy torstol'
+  ];
 
 type
-  EHerbCleanerState = (
-    CLEAN,
-    BANK,
+  EAction = enum(
+    UNKNOWN,
+    LOGIN,
+    OPEN_BANK,
+    WITHDRAW_HERBS,
+    CLOSE_BANK,
+    CLEAN_HERBS,
+    DEPOSIT_ITEMS,
     END_SCRIPT
   );
 
-  THerbCleaner = record
-    function GetState(): EHerbCleanerState;
-    procedure CleanHerbs();
-    procedure DoBank();
+  TBot = record
+    TerminateReason: String;
+    ActionHandlers: array[EAction] of function(): EAction of object;
+    Inactivity: TCountDown;
+    Runtime: TStopWatch;
+
+    procedure DebugLn(fmt: String; args: TVariantArray = []);
+    function Action_Unknown(): EAction;
+    function Action_Login(): EAction;
+    function Action_OpenBank(): EAction;
+    function Action_WithdrawHerbs(): EAction;
+    function Action_CloseBank(): EAction;
+    function Action_CleanHerbs(): EAction;
+    function Action_DepositItems(): EAction;
+    function Action_EndScript(): EAction;
+    procedure SetupActionHandlers();
+    procedure SetupObjects();
+    procedure Setup(Config: TConfigJSON);
     procedure Run();
   end;
 
-function THerbCleaner.GetState(): EHerbCleanerState;
+procedure TBot.DebugLn(fmt: String; args: TVariantArray);
 begin
-  if not Client.IsLoggedIn() then
-    Exit(EHerbCleanerState.END_SCRIPT);
-
-  if Inventory.Items.Contains(DIRTY_HERB) then
-    Exit(EHerbCleanerState.CLEAN);
-
-  Exit(EHerbCleanerState.BANK);
+  Logger.Info(fmt, args);
 end;
 
-procedure THerbCleaner.CleanHerbs();
+function TBot.Action_Unknown(): EAction;
+begin
+  Result := EAction.OPEN_BANK;
+end;
+
+function TBot.Action_Login(): EAction;
+begin
+  Login.DoLogin();
+  Result := EAction.OPEN_BANK;
+end;
+
+function TBot.Action_OpenBank(): EAction;
+begin
+  if not Bank.IsOpen() then
+  begin
+    Bank.Open(True);
+    SleepUntil(Bank.IsOpen, 50, 5000);
+    Exit(EAction.OPEN_BANK);
+  end;
+
+  if Inventory.Items.ContainsAny(GRIMY_HERBS) then
+    Exit(EAction.CLOSE_BANK);
+
+  if Inventory.Slots.Count() > 0 then
+    Exit(EAction.DEPOSIT_ITEMS);
+
+  Result := EAction.WITHDRAW_HERBS;
+end;
+
+function TBot.Action_WithdrawHerbs(): EAction;
+var
+  herbIndices: TIntegerArray;
+begin
+  if not Bank.IsOpen() then
+    Exit(EAction.OPEN_BANK);
+
+  if Inventory.Items.ContainsAny(GRIMY_HERBS) then
+    Exit(EAction.CLOSE_BANK);
+
+  if Inventory.Slots.Count() > 0 then
+    Exit(EAction.DEPOSIT_ITEMS);
+
+  herbIndices := Bank.Items.IndicesOf(GRIMY_HERBS);
+  if Length(herbIndices) = 0 then
+  begin
+    Self.TerminateReason := 'No grimy herbs left in bank';
+    Exit(EAction.END_SCRIPT);
+  end;
+
+  Bank.Items.Interact(herbIndices[0], 'Withdraw-All');
+  Sleep(500, 1000);
+  Result := EAction.WITHDRAW_HERBS;
+end;
+
+function TBot.Action_CloseBank(): EAction;
 begin
   if Bank.IsOpen() then
     Bank.Close();
+  Sleep(500, 800);
+  Result := EAction.CLEAN_HERBS;
+end;
+
+function TBot.Action_CleanHerbs(): EAction;
+var
+  herbSlots: TIntegerArray;
+  i: Integer;
+begin
+  if Bank.IsOpen() then
+    Exit(EAction.DEPOSIT_ITEMS);
 
   if not Inventory.Open() then
-    Exit;
-
-  while Inventory.Items.Contains(DIRTY_HERB) do
   begin
-    Inventory.Items.Click(DIRTY_HERB);
-    Sleep(CLEAN_CLICK_WAIT, CLEAN_CLICK_WAIT * 3);
-  end;
-end;
-
-procedure THerbCleaner.DoBank();
-begin
-  if not Bank.IsOpen() and not Bank.Open() then
-    Exit;
-
-  if Inventory.Slots.Count() > 0 then
-    Bank.DepositInventory();
-
-  if not Bank.Withdraw(DIRTY_HERB.ToBankItem(QUANTITY_ALL)) then
-  begin
-    WriteLn('No more grimy herbs in bank (or withdraw failed).');
-    TerminateScript();
-    Exit;
+    Sleep(200, 400);
+    Exit(EAction.CLEAN_HERBS);
   end;
 
-  Bank.Close();
+  herbSlots := Inventory.Items.IndicesOf(GRIMY_HERBS);
+  if Length(herbSlots) = 0 then
+    Exit(EAction.OPEN_BANK);
+
+  for i in herbSlots do
+  begin
+    Inventory.Items.Interact(i, 'Clean');
+    Sleep(50, 150);
+  end;
+
+  Result := EAction.CLEAN_HERBS;
 end;
 
-procedure THerbCleaner.Run();
-var
-  state: EHerbCleanerState;
+function TBot.Action_DepositItems(): EAction;
 begin
-  WriteLn('Herb cleaner started: ', DIRTY_HERB, ' -> ', CLEAN_HERB);
+  if not Bank.IsOpen() then
+    Exit(EAction.OPEN_BANK);
+
+  Bank.DepositInventory();
+  Sleep(500, 800);
+  Result := EAction.WITHDRAW_HERBS;
+end;
+
+function TBot.Action_EndScript(): EAction;
+begin
+  Result := EAction.END_SCRIPT;
+end;
+
+procedure TBot.SetupActionHandlers();
+begin
+  Self.ActionHandlers[EAction.UNKNOWN] := @Self.Action_Unknown;
+  Self.ActionHandlers[EAction.LOGIN] := @Self.Action_Login;
+  Self.ActionHandlers[EAction.OPEN_BANK] := @Self.Action_OpenBank;
+  Self.ActionHandlers[EAction.WITHDRAW_HERBS] := @Self.Action_WithdrawHerbs;
+  Self.ActionHandlers[EAction.CLOSE_BANK] := @Self.Action_CloseBank;
+  Self.ActionHandlers[EAction.CLEAN_HERBS] := @Self.Action_CleanHerbs;
+  Self.ActionHandlers[EAction.DEPOSIT_ITEMS] := @Self.Action_DepositItems;
+  Self.ActionHandlers[EAction.END_SCRIPT] := @Self.Action_EndScript;
+end;
+
+procedure TBot.SetupObjects();
+begin
+  // Setup objects if necessary
+end;
+
+procedure TBot.Setup(Config: TConfigJSON);
+begin
+  Logger.Setup('Herb Cleaner');
+  Self.SetupActionHandlers();
+  Self.SetupObjects();
 
   if not Client.IsLoggedIn() then
+    if not Login.DoLogin() then
+      raise 'Failed to login player.';
+end;
+
+procedure TBot.Run();
+var
+  action: EAction;
+  last: array[0..1] of EAction;
+begin
+  Self.Runtime.Start();
+  Self.Inactivity.Start(5 * MINUTE);
+  XPBar.SetupInterface();
+  XPBar.Setup();
+
+  action := EAction.LOGIN;
+  last[0] := EAction.UNKNOWN;
+  last[1] := EAction.UNKNOWN;
+
+  while (Self.Inactivity.Remaining > 0) and (action <> EAction.END_SCRIPT) do
   begin
-    WriteLn('Log in before starting.');
-    Exit;
+    if XPBar.EarnedXP() then
+      Self.Inactivity.Restart();
+
+    if (action <> EAction.UNKNOWN) and not last.Contains(action) then
+      Self.DebugLn('Executing action %s', [ToStr(action)]);
+
+    last[1] := last[0];
+    last[0] := action;
+
+    action := Self.ActionHandlers[action]();
   end;
 
-  repeat
-    state := Self.GetState();
-
-    case state of
-      EHerbCleanerState.CLEAN: Self.CleanHerbs();
-      EHerbCleanerState.BANK: Self.DoBank();
-      EHerbCleanerState.END_SCRIPT: Break;
-    end;
-
-    Sleep(100, 300);
-  until False;
-
-  WriteLn('Herb cleaner stopped.');
+  if Self.TerminateReason <> '' then
+    Self.DebugLn('Stopped: %s', [Self.TerminateReason])
+  else if action = EAction.END_SCRIPT then
+    Self.DebugLn('Stopped.')
+  else
+    Self.DebugLn('Stopped: inactivity timeout');
 end;
 
 var
-  HerbCleaner: THerbCleaner;
+  BotForm: TScriptForm;
+  BotConfig: TConfigJSON;
+  Bot: TBot;
 
 begin
-  HerbCleaner.Run();
+  BotConfig.Setup('scripts' + PATH_SEP + 'herb-cleaner');
+  BotForm.Setup('Herb Cleaner', BotConfig.Data);
+  BotForm.Run();
+
+  Bot.Setup(BotConfig);
+  Bot.Run();
 end.
