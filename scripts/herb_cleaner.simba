@@ -41,7 +41,6 @@ end;
 function TBot.Action_Login(): EAction;
 begin
   Login.DoLogin();
-  Result := EAction.OPEN_BANK;
 end;
 
 function TBot.Action_OpenBank(): EAction;
@@ -50,16 +49,9 @@ begin
   begin
     Bank.Open(True);
     SleepUntil(Bank.IsOpen, 50, 5000);
-    Exit(EAction.OPEN_BANK);
-  end;
-
-  if Inventory.Items.ContainsAny(GRIMY_HERBS) then
-    Exit(EAction.CLOSE_BANK);
-
-  if Inventory.Slots.Count() > 0 then
-    Exit(EAction.DEPOSIT_ITEMS);
-
-  Result := EAction.WITHDRAW_HERBS;
+    Result := EAction.OPEN_BANK;
+  end else
+    Result := EAction.WITHDRAW_HERBS;
 end;
 
 function TBot.Action_WithdrawHerbs(): EAction;
