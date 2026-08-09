@@ -85,23 +85,26 @@ function TBot.Action_FindHerbs(): EAction;
 var
   data: TBankPosition;
   herb: TItem;
-  found: Boolean;
+  matched: TItemArray;
+  slot: Integer;
 begin
   Bank.Search('grimy');
 
-  found := False;
-  for herb in GRIMY_HERBS do
-    if Bank.Items.Find(herb, data.Slot) then
-    begin
-      found := True;
-      Break;
-    end;
-
-  if not found then
+  if not Bank.Items.Find(GRIMY_HERBS, slot) then
   begin
     Self.BankEmpty := True;
     Exit(EAction.CLOSE_BANK);
   end;
+
+  matched := Bank.Items.Recognize(slot);
+  if matched.IsEmpty() then
+  begin
+    Self.BankEmpty := True;
+    Exit(EAction.CLOSE_BANK);
+  end;
+
+  herb := matched.First;
+  data.Slot := Bank.Slots.Box(slot);
 
   if Bank.IsSearchOpen() then
     Bank.CloseSearch();
