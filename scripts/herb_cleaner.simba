@@ -86,6 +86,7 @@ function TBot.Action_FindHerbs(): EAction;
 var
   matches: TRSItemFinderMatchArray;
   hit: TRSItemFinderMatch;
+  bounds: TBox;
   tab, scroll: Integer;
 begin
   Bank.Search('grimy');
@@ -98,15 +99,18 @@ begin
 
   hit := matches.First;
 
+  bounds := [Bank.Bounds.X1 + 56, Bank.Bounds.Y1 + 77, Bank.Bounds.X1 + 84, hit.Match.Box.Y1];
+  tab := 0;
+  if bounds.Height >= 8 then
+  begin
+    if Bank._FindTabText(Target.FindColor(TFonts.LIGHT_YELLOW, 0, bounds), bounds) then
+      tab := OCR.RecognizeNumber(bounds, Fonts.PLAIN_11, [TFonts.LIGHT_YELLOW], 0);
+    if Bank._FindTabText(Target.FindColor(TFonts.WHITE, 0, bounds), bounds) then
+      tab := OCR.RecognizeNumber(bounds, Fonts.PLAIN_11, [TFonts.WHITE], 0);
+  end;
+
   if Bank.IsSearchOpen() then
     Bank.CloseSearch();
-
-  tab := Bank.FindTab(hit.Item);
-  if tab = -1 then
-  begin
-    Self.BankEmpty := True;
-    Exit(EAction.CLOSE_BANK);
-  end;
 
   if not Bank.OpenTab(tab) then
     Exit;
