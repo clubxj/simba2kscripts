@@ -99,8 +99,11 @@ var
   available, count: Integer;
   herbs: TIntegerArray;
 begin
-  available := Inventory.Slots.CountEmpty();
   herbs := Bank.Items.IndicesOf(GRIMY_HERBS);
+  if herbs.IsEmpty() then
+    Exit(EAction.FIND_HERBS);
+
+  available := Inventory.Slots.CountEmpty();
   count := Bank.Slots.ReadStack(herbs.First);
 
   if Bank.Items.Interact(herbs.First, 'Withdraw-All') then
