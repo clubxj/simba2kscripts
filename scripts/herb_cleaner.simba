@@ -84,33 +84,29 @@ end;
 
 function TBot.Action_FindHerbs(): EAction;
 var
-  herbs: TIntegerArray;
-  slot, bounds: TBox;
-  tab, scroll, next: Integer;
-  down: Boolean;
+  matches: TRSItemFinderMatchArray;
+  hit: TRSItemFinderMatch;
+  tab, scroll: Integer;
 begin
   Bank.Search('grimy');
 
-  herbs := Bank.Items.IndicesOf(GRIMY_HERBS);
-  if herbs.IsEmpty() then
+  if not ItemFinder.FindAll(GRIMY_HERBS, Bank.Slots.Boxes(), matches) then
   begin
     Self.BankEmpty := True;
     Exit(EAction.CLOSE_BANK);
   end;
 
-  slot := Bank.Slots.Box(herbs.First);
-  bounds := [Bank.Bounds.X1 + 56, Bank.Bounds.Y1 + 77, Bank.Bounds.X1 + 84, slot.Y1];
-  tab := 0;
-  if bounds.Height >= 8 then
-  begin
-    if Bank._FindTabText(Target.FindColor(TFonts.LIGHT_YELLOW, 0, bounds), bounds) then
-      tab := OCR.RecognizeNumber(bounds, Fonts.PLAIN_11, [TFonts.LIGHT_YELLOW], 0);
-    if Bank._FindTabText(Target.FindColor(TFonts.WHITE, 0, bounds), bounds) then
-      tab := OCR.RecognizeNumber(bounds, Fonts.PLAIN_11, [TFonts.WHITE], 0);
-  end;
+  hit := matches.First;
 
   if Bank.IsSearchOpen() then
     Bank.CloseSearch();
+
+  tab := Bank.FindTab(hit.Item);
+  if tab = -1 then
+  begin
+    Self.BankEmpty := True;
+    Exit(EAction.CLOSE_BANK);
+  end;
 
   if not Bank.OpenTab(tab) then
     Exit;
@@ -118,46 +114,14 @@ begin
   if Bank.Items.ContainsAny(GRIMY_HERBS) then
     Exit(EAction.WITHDRAW_HERBS);
 
-  if not Bank.Scroll.CanScroll() then
+  scroll := Bank.FindScroll(hit.Item);
+  if (scroll = -1) or not Bank.Items.ContainsAny(GRIMY_HERBS) then
   begin
     Self.BankEmpty := True;
     Exit(EAction.CLOSE_BANK);
   end;
 
-  scroll := Bank.Scroll.GetLevel();
-  down := (scroll > 0) or RandomBoolean(0.5);
-
-  repeat
-    if down then
-      next := scroll - 5
-    else
-      next := scroll + 5;
-
-    scroll := Bank.Scroll.SetLevel(next);
-    if Bank.Items.ContainsAny(GRIMY_HERBS) then
-      Exit(EAction.WITHDRAW_HERBS);
-
-    if not Bank.IsOpen() then
-      Exit;
-  until not InRange(scroll, 1, 99);
-
-  down := not down;
-  repeat
-    if down then
-      next := scroll - 5
-    else
-      next := scroll + 5;
-
-    scroll := Bank.Scroll.SetLevel(next);
-    if Bank.Items.ContainsAny(GRIMY_HERBS) then
-      Exit(EAction.WITHDRAW_HERBS);
-
-    if not Bank.IsOpen() then
-      Exit;
-  until not InRange(scroll, 1, 99);
-
-  Self.BankEmpty := True;
-  Result := EAction.CLOSE_BANK;
+  Result := EAction.WITHDRAW_HERBS;
 end;
 
 function TBot.Action_CloseBank(): EAction;
