@@ -193,12 +193,7 @@ end;
 
 function TBot.Action_DepositItems(): EAction;
 begin
-  if not Bank.IsOpen() then
-    Exit(EAction.OPEN_BANK);
-
   Bank.DepositInventory();
-  Sleep(500, 800);
-  Result := EAction.WITHDRAW_HERBS;
 end;
 
 function TBot.Action_EndScript(): EAction;
