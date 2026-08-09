@@ -9,10 +9,15 @@ procedure THerbCleanerForm.CreateSettingsTab();
 var
   tab: TLazTabSheet;
   chunk: EBankChunk;
+  bankLocation: Integer;
 begin
   tab := Self.Form.CreateTab('Settings');
 
   Self.MaxRuntimeEdit := TLazEdit.CreateEx(tab, 'Max runtime', '', 50, 20, 100, 20);
+  if Self.Form.ConfigData.Assert('max_runtime', EJSONType.INT) then
+    Self.MaxRuntimeEdit.Text := ToStr(Self.Form.ConfigData.Item['max_runtime'].AsInt)
+  else
+    Self.MaxRuntimeEdit.Text := '0';
 
   Self.BankLocationCombo := TLazComboBox.CreateEx(tab, 'Bank location', '', 50, 60, 200, 25);
   Self.BankLocationCombo.Items.BeginUpdate();
@@ -21,7 +26,37 @@ begin
       ToStr(chunk).After('.').Replace('_', ' ').ToLower().Capitalize()
     );
   Self.BankLocationCombo.Items.EndUpdate();
-  Self.BankLocationCombo.ItemIndex := 0;
+
+  bankLocation := 0;
+  if Self.Form.ConfigData.Assert('bank_location', EJSONType.INT) then
+  begin
+    bankLocation := Self.Form.ConfigData.Item['bank_location'].AsInt;
+    if not InRange(bankLocation, Ord(Low(EBankChunk)), Ord(High(EBankChunk))) then
+      bankLocation := 0;
+  end;
+  Self.BankLocationCombo.ItemIndex := bankLocation;
+end;
+
+procedure THerbCleanerForm.SaveSettings(Config: TConfigJSON);
+var
+  maxRuntime, bankLocation: Integer;
+begin
+  maxRuntime := StrToInt(Self.MaxRuntimeEdit.Text, 0);
+  bankLocation := Self.BankLocationCombo.ItemIndex;
+  if not InRange(bankLocation, Ord(Low(EBankChunk)), Ord(High(EBankChunk))) then
+    bankLocation := 0;
+
+  if Config.Data.Assert('max_runtime', EJSONType.INT) then
+    Config.Data.Item['max_runtime'].AsInt := maxRuntime
+  else
+    Config.Data.AddInt('max_runtime', maxRuntime);
+
+  if Config.Data.Assert('bank_location', EJSONType.INT) then
+    Config.Data.Item['bank_location'].AsInt := bankLocation
+  else
+    Config.Data.AddInt('bank_location', bankLocation);
+
+  Config.Save();
 end;
 
 procedure THerbCleanerForm.Setup(caption: String = 'Herb Cleaner'; configData: TJSONItem = nil);

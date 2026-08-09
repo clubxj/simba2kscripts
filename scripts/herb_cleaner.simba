@@ -28,6 +28,8 @@ type
     TerminateReason: String;
     BankEmpty: Boolean;
     NextSlot: Integer;
+    MaxRuntime: Integer;
+    BankChunk: EBankChunk;
     GrimyHerbs: TItemArray;
     ActionHandlers: array[EAction] of function(): EAction of object;
     Inactivity: TCountDown;
@@ -274,9 +276,26 @@ begin
 end;
 
 procedure TBot.Setup(Config: TConfigJSON);
+var
+  bankLocation: Integer;
 begin
   Logger.Setup('Herb Cleaner');
   Self.SetupActionHandlers();
+
+  Self.MaxRuntime := 0;
+  if Config.Data.Assert('max_runtime', EJSONType.INT) then
+    Self.MaxRuntime := Config.Data.Item['max_runtime'].AsInt;
+
+  Self.BankChunk := Low(EBankChunk);
+  if Config.Data.Assert('bank_location', EJSONType.INT) then
+  begin
+    bankLocation := Config.Data.Item['bank_location'].AsInt;
+    if InRange(bankLocation, Ord(Low(EBankChunk)), Ord(High(EBankChunk))) then
+      Self.BankChunk := EBankChunk(bankLocation);
+  end;
+
+  Map.Setup([Self.BankChunk.Get()]);
+  Self.DebugLn('Map setup for bank chunk %s', [ToStr(Self.BankChunk)]);
 
   if not Client.IsLoggedIn() then
     if not Login.DoLogin() then
@@ -301,6 +320,12 @@ begin
 
   while (Self.Inactivity.Remaining > 0) and (action <> EAction.END_SCRIPT) do
   begin
+    if (Self.MaxRuntime > 0) and (Self.Runtime.Elapsed >= Self.MaxRuntime * MINUTE) then
+    begin
+      Self.TerminateReason := 'Max runtime reached';
+      Break;
+    end;
+
     if XPBar.EarnedXP() then
       Self.Inactivity.Restart();
 
@@ -325,6 +350,12 @@ var
   Form: THerbCleanerForm;
   BotConfig: TConfigJSON;
   Bot: TBot;
+
+procedure TScriptForm.OnStart(sender: TLazObject); override;
+begin
+  inherited();
+  Form.SaveSettings(BotConfig);
+end;
 
 begin
   BotConfig.Setup('scripts' + PATH_SEP + 'herb-cleaner');
