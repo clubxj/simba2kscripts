@@ -28,6 +28,8 @@ type
     TerminateReason: String;
     BankEmpty: Boolean;
     NextSlot: Integer;
+    CleanedPass: Integer;
+    SkippedPass: Integer;
     MaxRuntime: Integer;
     BankChunk: EBankChunk;
     GrimyHerbs: TItemArray;
@@ -40,6 +42,12 @@ type
 procedure TBot.DebugLn(fmt: String; args: TVariantArray);
 begin
   Logger.Info(fmt, args);
+end;
+
+procedure TBot.MarkBankEmpty(reason: String);
+begin
+  Self.BankEmpty := True;
+  Self.DebugLn('BankEmpty: %s', [reason]);
 end;
 
 function TBot.GetGrimyHerbs(): TItemArray;
@@ -92,6 +100,7 @@ begin
 
   if Chat.LeveledUp() then
   begin
+    Self.DebugLn('Dismissing level-up dialog', []);
     Chat.HandleLevelUp();
     Exit(EAction.UNKNOWN);
   end;
@@ -129,7 +138,10 @@ var
   herbs: TIntegerArray;
 begin
   if not Bank.Open() then
+  begin
+    Self.DebugLn('OpenBank failed', []);
     Exit;
+  end;
 
   if Inventory.Slots.CountEmpty() < (28 - Bank.GetLockedSlots().Length) then
     Exit(EAction.DEPOSIT_ITEMS);
@@ -153,6 +165,7 @@ begin
 
   available := Inventory.Slots.CountEmpty();
   count := Bank.Slots.ReadStack(herbs.First);
+  Self.DebugLn('Withdraw: slot %d, stack %d, empty %d', [herbs.First, count, available]);
 
   if Bank.Items.Interact(herbs.First, 'Withdraw-All') then
   begin
@@ -169,13 +182,14 @@ var
   bounds: TBox;
   tab, scroll, next: Integer;
   down: Boolean;
+  direction: String;
 begin
   Bank.Search('grimy');
 
   herbs := Bank.Items.IndicesOf(Self.GetGrimyHerbs());
   if herbs.IsEmpty() then
   begin
-    Self.BankEmpty := True;
+    Self.MarkBankEmpty('search miss');
     Exit(EAction.CLOSE_INTERFACE);
   end;
 
@@ -196,16 +210,24 @@ begin
     Exit;
 
   if Bank.Items.ContainsAny(Self.GetGrimyHerbs()) then
+  begin
+    Self.DebugLn('FindHerbs: tab %d, visible without scroll', [tab]);
     Exit(EAction.WITHDRAW_HERBS);
+  end;
 
   if not Bank.Scroll.CanScroll() then
   begin
-    Self.BankEmpty := True;
+    Self.MarkBankEmpty(Format('tab %d not scrollable', [tab]));
     Exit(EAction.CLOSE_INTERFACE);
   end;
 
   scroll := Bank.Scroll.GetLevel();
   down := (scroll > 0) or RandomBoolean(0.5);
+  if down then
+    direction := 'down'
+  else
+    direction := 'up';
+  Self.DebugLn('FindHerbs: tab %d, scrolling %s from %d', [tab, direction, scroll]);
 
   repeat
     if down then
@@ -215,13 +237,21 @@ begin
 
     scroll := Bank.Scroll.SetLevel(next);
     if Bank.Items.ContainsAny(Self.GetGrimyHerbs()) then
+    begin
+      Self.DebugLn('FindHerbs: found at scroll %d (%s)', [scroll, direction]);
       Exit(EAction.WITHDRAW_HERBS);
+    end;
 
     if not Bank.IsOpen() then
       Exit;
   until not InRange(scroll, 1, 99);
 
   down := not down;
+  if down then
+    direction := 'down'
+  else
+    direction := 'up';
+
   repeat
     if down then
       next := scroll - 5
@@ -230,13 +260,16 @@ begin
 
     scroll := Bank.Scroll.SetLevel(next);
     if Bank.Items.ContainsAny(Self.GetGrimyHerbs()) then
+    begin
+      Self.DebugLn('FindHerbs: found at scroll %d (%s)', [scroll, direction]);
       Exit(EAction.WITHDRAW_HERBS);
+    end;
 
     if not Bank.IsOpen() then
       Exit;
   until not InRange(scroll, 1, 99);
 
-  Self.BankEmpty := True;
+  Self.MarkBankEmpty(Format('scroll exhausted (tab %d)', [tab]));
   Result := EAction.CLOSE_INTERFACE;
 end;
 
@@ -253,7 +286,12 @@ begin
   slot := CLEAN_PATTERN[Self.NextSlot];
 
   if Inventory.Items.IndicesOf(Self.GetGrimyHerbs()).Contains(slot) then
+  begin
     Inventory.Items.Interact(slot, 'Clean');
+    Inc(Self.CleanedPass);
+  end
+  else
+    Inc(Self.SkippedPass);
 
   Inc(Self.NextSlot);
   if Self.NextSlot > High(CLEAN_PATTERN) then
@@ -261,6 +299,10 @@ begin
 
   if Self.NextSlot = 0 then
   begin
+    Self.DebugLn('Clean pass: cleaned %d, skipped %d', [Self.CleanedPass, Self.SkippedPass]);
+    Self.CleanedPass := 0;
+    Self.SkippedPass := 0;
+
     if Self.BankEmpty then
     begin
       Self.TerminateReason := 'No grimy herbs left in bank';
