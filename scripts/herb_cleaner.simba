@@ -336,6 +336,7 @@ begin
     last[0] := action;
 
     action := Self.ActionHandlers[action]();
+    Antiban.DoAntiban();
   end;
 
   if Self.TerminateReason <> '' then
