@@ -31,6 +31,7 @@ type
     MaxRuntime: Integer;
     BankChunk: EBankChunk;
     GrimyHerbs: TItemArray;
+    GrimyHerbsLock: TLock;
     ActionHandlers: array[EAction] of function(): EAction of object;
     Inactivity: TCountDown;
     Runtime: TStopWatch;
@@ -41,10 +42,59 @@ begin
   Logger.Info(fmt, args);
 end;
 
+function TBot.GetGrimyHerbs(): TItemArray;
+begin
+  Self.GrimyHerbsLock.Enter();
+  Result := Copy(Self.GrimyHerbs);
+  Self.GrimyHerbsLock.Leave();
+end;
+
+procedure TBot.SetGrimyHerbs(herbs: TItemArray);
+begin
+  Self.GrimyHerbsLock.Enter();
+  Self.GrimyHerbs := Copy(herbs);
+  Self.GrimyHerbsLock.Leave();
+end;
+
+function TBot.BuildGrimyHerbs(level: Integer): TItemArray;
+begin
+  Result := [];
+
+  if level >= 3 then Result += 'Grimy guam leaf';
+  if level >= 5 then Result += 'Grimy marrentill';
+  if level >= 11 then Result += 'Grimy tarromin';
+  if level >= 20 then Result += 'Grimy harralander';
+  if level >= 25 then Result += 'Grimy ranarr weed';
+  if level >= 30 then Result += 'Grimy toadflax';
+  if level >= 40 then Result += 'Grimy irit leaf';
+  if level >= 48 then Result += 'Grimy avantoe';
+  if level >= 54 then Result += 'Grimy kwuarm';
+  if level >= 59 then Result += 'Grimy snapdragon';
+  if level >= 65 then Result += 'Grimy cadantine';
+  if level >= 67 then Result += 'Grimy lantadyme';
+  if level >= 70 then Result += 'Grimy dwarf weed';
+  if level >= 75 then Result += 'Grimy torstol';
+end;
+
+procedure TBot.OnLevelUp(img: TImage; level: Integer; skill: ESkill);
+begin
+  if skill <> ESkill.HERBLORE then
+    Exit;
+
+  Self.SetGrimyHerbs(Self.BuildGrimyHerbs(level));
+  Self.DebugLn('Herblore %d — cleaning: %s', [level, ToStr(Self.GetGrimyHerbs())]);
+end;
+
 function TBot.Action_Unknown(): EAction;
 begin
   if not Client.IsLoggedIn() then
     Exit(EAction.LOGIN);
+
+  if Chat.LeveledUp() then
+  begin
+    Chat.HandleLevelUp();
+    Exit(EAction.UNKNOWN);
+  end;
 
   if MSInterface.IsOpen() then
   begin
@@ -57,7 +107,7 @@ begin
     Exit(EAction.CLOSE_INTERFACE);
   end;
 
-  if Inventory.Items.ContainsAny(Self.GrimyHerbs) then
+  if Inventory.Items.ContainsAny(Self.GetGrimyHerbs()) then
     Exit(EAction.CLEAN_HERBS);
 
   if Self.BankEmpty then
@@ -84,7 +134,7 @@ begin
   if Inventory.Slots.CountEmpty() < (28 - Bank.GetLockedSlots().Length) then
     Exit(EAction.DEPOSIT_ITEMS);
 
-  herbs := Bank.Items.IndicesOf(Self.GrimyHerbs);
+  herbs := Bank.Items.IndicesOf(Self.GetGrimyHerbs());
 
   if herbs.IsEmpty() then
     Result := EAction.FIND_HERBS
@@ -97,7 +147,7 @@ var
   available, count: Integer;
   herbs: TIntegerArray;
 begin
-  herbs := Bank.Items.IndicesOf(Self.GrimyHerbs);
+  herbs := Bank.Items.IndicesOf(Self.GetGrimyHerbs());
   if herbs.IsEmpty() then
     Exit(EAction.FIND_HERBS);
 
@@ -122,7 +172,7 @@ var
 begin
   Bank.Search('grimy');
 
-  herbs := Bank.Items.IndicesOf(Self.GrimyHerbs);
+  herbs := Bank.Items.IndicesOf(Self.GetGrimyHerbs());
   if herbs.IsEmpty() then
   begin
     Self.BankEmpty := True;
@@ -145,7 +195,7 @@ begin
   if not Bank.OpenTab(tab) then
     Exit;
 
-  if Bank.Items.ContainsAny(Self.GrimyHerbs) then
+  if Bank.Items.ContainsAny(Self.GetGrimyHerbs()) then
     Exit(EAction.WITHDRAW_HERBS);
 
   if not Bank.Scroll.CanScroll() then
@@ -164,7 +214,7 @@ begin
       next := scroll + 5;
 
     scroll := Bank.Scroll.SetLevel(next);
-    if Bank.Items.ContainsAny(Self.GrimyHerbs) then
+    if Bank.Items.ContainsAny(Self.GetGrimyHerbs()) then
       Exit(EAction.WITHDRAW_HERBS);
 
     if not Bank.IsOpen() then
@@ -179,7 +229,7 @@ begin
       next := scroll + 5;
 
     scroll := Bank.Scroll.SetLevel(next);
-    if Bank.Items.ContainsAny(Self.GrimyHerbs) then
+    if Bank.Items.ContainsAny(Self.GetGrimyHerbs()) then
       Exit(EAction.WITHDRAW_HERBS);
 
     if not Bank.IsOpen() then
@@ -202,7 +252,7 @@ var
 begin
   slot := CLEAN_PATTERN[Self.NextSlot];
 
-  if Inventory.Items.IndicesOf(Self.GrimyHerbs).Contains(slot) then
+  if Inventory.Items.IndicesOf(Self.GetGrimyHerbs()).Contains(slot) then
     Inventory.Items.Interact(slot, 'Clean');
 
   Inc(Self.NextSlot);
@@ -250,29 +300,16 @@ end;
 procedure TBot.SetupGrimyHerbs();
 var
   level: Integer;
+  herbs: TItemArray;
 begin
   level := Stats.GetLevel(ESkill.HERBLORE);
-  Self.GrimyHerbs := [];
+  herbs := Self.BuildGrimyHerbs(level);
 
-  if level >= 3 then Self.GrimyHerbs += 'Grimy guam leaf';
-  if level >= 5 then Self.GrimyHerbs += 'Grimy marrentill';
-  if level >= 11 then Self.GrimyHerbs += 'Grimy tarromin';
-  if level >= 20 then Self.GrimyHerbs += 'Grimy harralander';
-  if level >= 25 then Self.GrimyHerbs += 'Grimy ranarr weed';
-  if level >= 30 then Self.GrimyHerbs += 'Grimy toadflax';
-  if level >= 40 then Self.GrimyHerbs += 'Grimy irit leaf';
-  if level >= 48 then Self.GrimyHerbs += 'Grimy avantoe';
-  if level >= 54 then Self.GrimyHerbs += 'Grimy kwuarm';
-  if level >= 59 then Self.GrimyHerbs += 'Grimy snapdragon';
-  if level >= 65 then Self.GrimyHerbs += 'Grimy cadantine';
-  if level >= 67 then Self.GrimyHerbs += 'Grimy lantadyme';
-  if level >= 70 then Self.GrimyHerbs += 'Grimy dwarf weed';
-  if level >= 75 then Self.GrimyHerbs += 'Grimy torstol';
-
-  if Self.GrimyHerbs.IsEmpty() then
+  if herbs.IsEmpty() then
     raise 'Herblore level too low to clean any herbs.';
 
-  Self.DebugLn('Herblore %d — cleaning: %s', [level, ToStr(Self.GrimyHerbs)]);
+  Self.SetGrimyHerbs(herbs);
+  Self.DebugLn('Herblore %d — cleaning: %s', [level, ToStr(Self.GetGrimyHerbs())]);
 end;
 
 procedure TBot.Setup(Config: TConfigJSON);
@@ -281,6 +318,9 @@ var
 begin
   Logger.Setup('Herb Cleaner');
   Self.SetupActionHandlers();
+
+  Self.GrimyHerbsLock := TLock.Create();
+  AddOnTerminate(@Self.GrimyHerbsLock.Free);
 
   Self.MaxRuntime := 0;
   if Config.Data.Assert('max_runtime', EJSONType.INT) then
@@ -302,6 +342,9 @@ begin
       raise 'Failed to login player.';
 
   Self.SetupGrimyHerbs();
+
+  StartListeners(300);
+  LevelUpListener.OnLevelUp += @Self.OnLevelUp;
 end;
 
 procedure TBot.Run();
