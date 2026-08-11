@@ -1,0 +1,453 @@
+//!PACKAGE HERB_CLEANER
+{$DEFINE WL_DISABLE_FAKE_INPUT}
+{$I WaspLib/main.simba}
+{$I form.simba}
+
+const
+  CLEAN_PATTERN: TIntegerArray = [
+    0, 4, 1, 5, 2, 6, 3, 7,
+    8, 9, 10, 11, 12, 13, 14, 15,
+    19, 18, 17, 16, 23, 22, 21, 20,
+    24, 25, 26, 27
+  ];
+
+type
+  EAction = enum(
+    UNKNOWN,
+    LOGIN,
+    OPEN_BANK,
+    WITHDRAW_HERBS,
+    FIND_HERBS,
+    CLOSE_INTERFACE,
+    CLEAN_HERBS,
+    DEPOSIT_ITEMS,
+    END_SCRIPT
+  );
+
+  TBot = record
+    TerminateReason: String;
+    BankEmpty: Boolean;
+    NextSlot: Integer;
+    CleanedPass: Integer;
+    SkippedPass: Integer;
+    MaxRuntime: Integer;
+    BankChunk: EBankChunk;
+    GrimyHerbs: TItemArray;
+    GrimyHerbsLock: TLock;
+    ActionHandlers: array[EAction] of function(): EAction of object;
+    Inactivity: TCountDown;
+    Runtime: TStopWatch;
+  end;
+
+procedure TBot.DebugLn(fmt: String; args: TVariantArray);
+begin
+  Logger.Info(fmt, args);
+end;
+
+procedure TBot.MarkBankEmpty(reason: String);
+begin
+  Self.BankEmpty := True;
+  Self.DebugLn('BankEmpty: %s', [reason]);
+end;
+
+function TBot.GetGrimyHerbs(): TItemArray;
+begin
+  Self.GrimyHerbsLock.Enter();
+  Result := Copy(Self.GrimyHerbs);
+  Self.GrimyHerbsLock.Leave();
+end;
+
+procedure TBot.SetGrimyHerbs(herbs: TItemArray);
+begin
+  Self.GrimyHerbsLock.Enter();
+  Self.GrimyHerbs := Copy(herbs);
+  Self.GrimyHerbsLock.Leave();
+end;
+
+function TBot.BuildGrimyHerbs(level: Integer): TItemArray;
+begin
+  Result := [];
+
+  if level >= 3 then Result += 'Grimy guam leaf';
+  if level >= 5 then Result += 'Grimy marrentill';
+  if level >= 11 then Result += 'Grimy tarromin';
+  if level >= 20 then Result += 'Grimy harralander';
+  if level >= 25 then Result += 'Grimy ranarr weed';
+  if level >= 30 then Result += 'Grimy toadflax';
+  if level >= 40 then Result += 'Grimy irit leaf';
+  if level >= 48 then Result += 'Grimy avantoe';
+  if level >= 54 then Result += 'Grimy kwuarm';
+  if level >= 59 then Result += 'Grimy snapdragon';
+  if level >= 65 then Result += 'Grimy cadantine';
+  if level >= 67 then Result += 'Grimy lantadyme';
+  if level >= 70 then Result += 'Grimy dwarf weed';
+  if level >= 75 then Result += 'Grimy torstol';
+end;
+
+procedure TBot.OnLevelUp(img: TImage; level: Integer; skill: ESkill);
+begin
+  if skill <> ESkill.HERBLORE then
+    Exit;
+
+  Self.SetGrimyHerbs(Self.BuildGrimyHerbs(level));
+  Self.DebugLn('Herblore %d — cleaning: %s', [level, ToStr(Self.GetGrimyHerbs())]);
+end;
+
+function TBot.Action_Unknown(): EAction;
+begin
+  if not Client.IsLoggedIn() then
+    Exit(EAction.LOGIN);
+
+  if Chat.LeveledUp() then
+  begin
+    Self.DebugLn('Dismissing level-up dialog', []);
+    Chat.HandleLevelUp();
+    Exit(EAction.UNKNOWN);
+  end;
+
+  if MSInterface.IsOpen() then
+  begin
+    if not Bank.IsOpen() then
+      Exit(EAction.CLOSE_INTERFACE);
+
+    if Inventory.Slots.CountEmpty() > 0 then
+      Exit(EAction.WITHDRAW_HERBS);
+
+    Exit(EAction.CLOSE_INTERFACE);
+  end;
+
+  if Inventory.Items.ContainsAny(Self.GetGrimyHerbs()) then
+    Exit(EAction.CLEAN_HERBS);
+
+  if Self.BankEmpty then
+  begin
+    Self.TerminateReason := 'No grimy herbs left in bank';
+    Exit(EAction.END_SCRIPT);
+  end;
+
+  Result := EAction.OPEN_BANK;
+end;
+
+function TBot.Action_Login(): EAction;
+begin
+  Login.DoLogin();
+end;
+
+function TBot.Action_OpenBank(): EAction;
+var
+  herbs: TIntegerArray;
+begin
+  if not Bank.Open() then
+  begin
+    Self.DebugLn('OpenBank failed', []);
+    Exit;
+  end;
+
+  if Inventory.Slots.CountEmpty() < (28 - Bank.GetLockedSlots().Length) then
+    Exit(EAction.DEPOSIT_ITEMS);
+
+  herbs := Bank.Items.IndicesOf(Self.GetGrimyHerbs());
+
+  if herbs.IsEmpty() then
+    Result := EAction.FIND_HERBS
+  else
+    Result := EAction.WITHDRAW_HERBS;
+end;
+
+function TBot.Action_WithdrawHerbs(): EAction;
+var
+  available, count: Integer;
+  herbs: TIntegerArray;
+begin
+  herbs := Bank.Items.IndicesOf(Self.GetGrimyHerbs());
+  if herbs.IsEmpty() then
+    Exit(EAction.FIND_HERBS);
+
+  available := Inventory.Slots.CountEmpty();
+  count := Bank.Slots.ReadStack(herbs.First);
+  Self.DebugLn('Withdraw: slot %d, stack %d, empty %d', [herbs.First, count, available]);
+
+  if Bank.Items.Interact(herbs.First, 'Withdraw-All') then
+  begin
+    if count >= available then
+      Result := EAction.CLOSE_INTERFACE
+    else
+      Result := EAction.WITHDRAW_HERBS;
+  end;
+end;
+
+function TBot.Action_FindHerbs(): EAction;
+var
+  herbs: TIntegerArray;
+  bounds: TBox;
+  tab, scroll, next: Integer;
+  down: Boolean;
+  direction: String;
+begin
+  Bank.Search('grimy');
+
+  herbs := Bank.Items.IndicesOf(Self.GetGrimyHerbs());
+  if herbs.IsEmpty() then
+  begin
+    Self.MarkBankEmpty('search miss');
+    Exit(EAction.CLOSE_INTERFACE);
+  end;
+
+  bounds := [Bank.Bounds.X1 + 56, Bank.Bounds.Y1 + 77, Bank.Bounds.X1 + 84, Bank.Slots.Box(herbs.First).Y1];
+  tab := 0;
+  if bounds.Height >= 8 then
+  begin
+    if Bank._FindTabText(Target.FindColor(TFonts.LIGHT_YELLOW, 0, bounds), bounds) then
+      tab := OCR.RecognizeNumber(bounds, Fonts.PLAIN_11, [TFonts.LIGHT_YELLOW], 0);
+    if Bank._FindTabText(Target.FindColor(TFonts.WHITE, 0, bounds), bounds) then
+      tab := OCR.RecognizeNumber(bounds, Fonts.PLAIN_11, [TFonts.WHITE], 0);
+  end;
+
+  if Bank.IsSearchOpen() then
+    Bank.CloseSearch();
+
+  if not Bank.OpenTab(tab) then
+    Exit;
+
+  if Bank.Items.ContainsAny(Self.GetGrimyHerbs()) then
+  begin
+    Self.DebugLn('FindHerbs: tab %d, visible without scroll', [tab]);
+    Exit(EAction.WITHDRAW_HERBS);
+  end;
+
+  if not Bank.Scroll.CanScroll() then
+  begin
+    Self.MarkBankEmpty(Format('tab %d not scrollable', [tab]));
+    Exit(EAction.CLOSE_INTERFACE);
+  end;
+
+  scroll := Bank.Scroll.GetLevel();
+  down := (scroll > 0) or RandomBoolean(0.5);
+  if down then
+    direction := 'down'
+  else
+    direction := 'up';
+  Self.DebugLn('FindHerbs: tab %d, scrolling %s from %d', [tab, direction, scroll]);
+
+  repeat
+    if down then
+      next := scroll - 5
+    else
+      next := scroll + 5;
+
+    scroll := Bank.Scroll.SetLevel(next);
+    if Bank.Items.ContainsAny(Self.GetGrimyHerbs()) then
+    begin
+      Self.DebugLn('FindHerbs: found at scroll %d (%s)', [scroll, direction]);
+      Exit(EAction.WITHDRAW_HERBS);
+    end;
+
+    if not Bank.IsOpen() then
+      Exit;
+  until not InRange(scroll, 1, 99);
+
+  down := not down;
+  if down then
+    direction := 'down'
+  else
+    direction := 'up';
+
+  repeat
+    if down then
+      next := scroll - 5
+    else
+      next := scroll + 5;
+
+    scroll := Bank.Scroll.SetLevel(next);
+    if Bank.Items.ContainsAny(Self.GetGrimyHerbs()) then
+    begin
+      Self.DebugLn('FindHerbs: found at scroll %d (%s)', [scroll, direction]);
+      Exit(EAction.WITHDRAW_HERBS);
+    end;
+
+    if not Bank.IsOpen() then
+      Exit;
+  until not InRange(scroll, 1, 99);
+
+  Self.MarkBankEmpty(Format('scroll exhausted (tab %d)', [tab]));
+  Result := EAction.CLOSE_INTERFACE;
+end;
+
+function TBot.Action_CloseInterface(): EAction;
+begin
+  if MSInterface.Close() then
+    Result := EAction.UNKNOWN;
+end;
+
+function TBot.Action_CleanHerbs(): EAction;
+var
+  slot: Integer;
+begin
+  slot := CLEAN_PATTERN[Self.NextSlot];
+
+  if Inventory.Items.IndicesOf(Self.GetGrimyHerbs()).Contains(slot) then
+  begin
+    Inventory.Items.Interact(slot, 'Clean');
+    Inc(Self.CleanedPass);
+  end
+  else
+    Inc(Self.SkippedPass);
+
+  Inc(Self.NextSlot);
+  if Self.NextSlot > High(CLEAN_PATTERN) then
+    Self.NextSlot := 0;
+
+  if Self.NextSlot = 0 then
+  begin
+    Self.DebugLn('Clean pass: cleaned %d, skipped %d', [Self.CleanedPass, Self.SkippedPass]);
+    Self.CleanedPass := 0;
+    Self.SkippedPass := 0;
+
+    if Self.BankEmpty then
+    begin
+      Self.TerminateReason := 'No grimy herbs left in bank';
+      Exit(EAction.END_SCRIPT);
+    end;
+
+    Exit(EAction.OPEN_BANK);
+  end;
+
+  Result := EAction.CLEAN_HERBS;
+end;
+
+function TBot.Action_DepositItems(): EAction;
+begin
+  if Bank.DepositInventory() then
+    Result := EAction.WITHDRAW_HERBS;
+end;
+
+function TBot.Action_EndScript(): EAction;
+begin
+  Result := EAction.END_SCRIPT;
+end;
+
+procedure TBot.SetupActionHandlers();
+begin
+  Self.ActionHandlers[EAction.UNKNOWN] := @Self.Action_Unknown;
+  Self.ActionHandlers[EAction.LOGIN] := @Self.Action_Login;
+  Self.ActionHandlers[EAction.OPEN_BANK] := @Self.Action_OpenBank;
+  Self.ActionHandlers[EAction.WITHDRAW_HERBS] := @Self.Action_WithdrawHerbs;
+  Self.ActionHandlers[EAction.FIND_HERBS] := @Self.Action_FindHerbs;
+  Self.ActionHandlers[EAction.CLOSE_INTERFACE] := @Self.Action_CloseInterface;
+  Self.ActionHandlers[EAction.CLEAN_HERBS] := @Self.Action_CleanHerbs;
+  Self.ActionHandlers[EAction.DEPOSIT_ITEMS] := @Self.Action_DepositItems;
+  Self.ActionHandlers[EAction.END_SCRIPT] := @Self.Action_EndScript;
+end;
+
+procedure TBot.SetupGrimyHerbs();
+var
+  level: Integer;
+  herbs: TItemArray;
+begin
+  level := Stats.GetLevel(ESkill.HERBLORE);
+  herbs := Self.BuildGrimyHerbs(level);
+
+  if herbs.IsEmpty() then
+    raise 'Herblore level too low to clean any herbs.';
+
+  Self.SetGrimyHerbs(herbs);
+  Self.DebugLn('Herblore %d — cleaning: %s', [level, ToStr(Self.GetGrimyHerbs())]);
+end;
+
+procedure TBot.Setup(Config: TConfigJSON);
+var
+  bankLocation: Integer;
+begin
+  Logger.Setup('Herb Cleaner');
+  Self.SetupActionHandlers();
+
+  Self.GrimyHerbsLock := TLock.Create();
+  AddOnTerminate(@Self.GrimyHerbsLock.Free);
+
+  Self.MaxRuntime := 0;
+  if Config.Data.Assert('max_runtime', EJSONType.INT) then
+    Self.MaxRuntime := Config.Data.Item['max_runtime'].AsInt;
+
+  Self.BankChunk := Low(EBankChunk);
+  if Config.Data.Assert('bank_location', EJSONType.INT) then
+  begin
+    bankLocation := Config.Data.Item['bank_location'].AsInt;
+    if InRange(bankLocation, Ord(Low(EBankChunk)), Ord(High(EBankChunk))) then
+      Self.BankChunk := EBankChunk(bankLocation);
+  end;
+
+  Map.Setup([Self.BankChunk.Get()]);
+  Self.DebugLn('Map setup for bank chunk %s', [ToStr(Self.BankChunk)]);
+
+  if not Client.IsLoggedIn() then
+    if not Login.DoLogin() then
+      raise 'Failed to login player.';
+
+  Self.SetupGrimyHerbs();
+
+  StartListeners(300);
+  LevelUpListener.OnLevelUp += @Self.OnLevelUp;
+end;
+
+procedure TBot.Run();
+var
+  action: EAction;
+  last: array[0..1] of EAction;
+begin
+  Self.Runtime.Start();
+  Self.Inactivity.Start(5 * MINUTE);
+  XPBar.SetupInterface();
+  XPBar.Setup();
+
+  action := EAction.LOGIN;
+  last[0] := EAction.UNKNOWN;
+  last[1] := EAction.UNKNOWN;
+
+  while (Self.Inactivity.Remaining > 0) and (action <> EAction.END_SCRIPT) do
+  begin
+    if (Self.MaxRuntime > 0) and (Self.Runtime.Elapsed >= Self.MaxRuntime * MINUTE) then
+    begin
+      Self.TerminateReason := 'Max runtime reached';
+      Break;
+    end;
+
+    if XPBar.EarnedXP() then
+      Self.Inactivity.Restart();
+
+    if (action <> EAction.UNKNOWN) and not last.Contains(action) then
+      Self.DebugLn('Executing action %s', [ToStr(action)]);
+
+    last[1] := last[0];
+    last[0] := action;
+
+    action := Self.ActionHandlers[action]();
+    Antiban.DoAntiban();
+  end;
+
+  if Self.TerminateReason <> '' then
+    Self.DebugLn('Stopped: %s', [Self.TerminateReason])
+  else if action = EAction.END_SCRIPT then
+    Self.DebugLn('Stopped.')
+  else
+    Self.DebugLn('Stopped: inactivity timeout');
+end;
+
+var
+  Form: THerbCleanerForm;
+  BotConfig: TConfigJSON;
+  Bot: TBot;
+
+procedure TScriptForm.OnStart(sender: TLazObject); override;
+begin
+  inherited();
+  Form.SaveSettings(BotConfig);
+end;
+
+begin
+  BotConfig.Setup('scripts' + PATH_SEP + 'herb-cleaner');
+  Form.Setup('Herb Cleaner', BotConfig.Data);
+  Form.Run();
+
+  Bot.Setup(BotConfig);
+  Bot.Run();
+end.
