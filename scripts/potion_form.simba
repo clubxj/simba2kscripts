@@ -1,0 +1,113 @@
+type
+  TPotionMakerForm = record
+    Form: TScriptForm;
+    MaxRuntimeEdit: TLazEdit;
+    BankLocationCombo: TLazComboBox;
+    RecipeCombo: TLazComboBox;
+    AvailablePotions: array of EPotion;
+  end;
+
+procedure TPotionMakerForm.CreateSettingsTab();
+var
+  tab: TLazTabSheet;
+  chunk: EBankChunk;
+  bankLocation, recipe: Integer;
+  potion: EPotion;
+  bankLocation, recipe: Integer;
+begin
+  tab := Self.Form.CreateTab('Settings');
+
+  Self.MaxRuntimeEdit := TLazEdit.CreateEx(tab, 'Max runtime', '', 50, 20, 100, 20);
+  if Self.Form.ConfigData.Assert('max_runtime', EJSONType.INT) then
+    Self.MaxRuntimeEdit.Text := ToStr(Self.Form.ConfigData.Item['max_runtime'].AsInt)
+  else
+    Self.MaxRuntimeEdit.Text := '0';
+
+  Self.BankLocationCombo := TLazComboBox.CreateEx(tab, 'Bank location', '', 50, 60, 200, 25);
+  Self.BankLocationCombo.Items.BeginUpdate();
+  for chunk := Low(EBankChunk) to High(EBankChunk) do
+    Self.BankLocationCombo.Items.Add(
+      ToStr(chunk).After('.').Replace('_', ' ').ToLower().Capitalize()
+    );
+  Self.BankLocationCombo.Items.EndUpdate();
+
+  bankLocation := 0;
+  if Self.Form.ConfigData.Assert('bank_location', EJSONType.INT) then
+  begin
+    bankLocation := Self.Form.ConfigData.Item['bank_location'].AsInt;
+    if not InRange(bankLocation, Ord(Low(EBankChunk)), Ord(High(EBankChunk))) then
+      bankLocation := 0;
+  end;
+  Self.BankLocationCombo.ItemIndex := bankLocation;
+
+  Self.AvailablePotions := [];
+  for potion := Low(EPotion) to High(EPotion) do
+    Self.AvailablePotions += potion;
+
+  Self.RecipeCombo := TLazComboBox.CreateEx(tab, 'Potion recipe', '', 50, 100, 200, 25);
+  Self.RecipeCombo.Items.BeginUpdate();
+  for potion in Self.AvailablePotions do
+    Self.RecipeCombo.Items.Add(Format('%s (%d)', [potion.Label(), POTION_LEVEL[potion]]));
+  Self.RecipeCombo.Items.EndUpdate();
+
+  recipe := 0;
+  if Self.Form.ConfigData.Assert('recipe', EJSONType.INT) then
+  begin
+    recipe := IndexOfPotion(Self.AvailablePotions, EPotion(Self.Form.ConfigData.Item['recipe'].AsInt));
+    if recipe < 0 then
+      recipe := 0;
+  end;
+  Self.RecipeCombo.ItemIndex := recipe;
+end;
+
+procedure TPotionMakerForm.SaveSettings(Config: TConfigJSON);
+var
+  maxRuntime, bankLocation, recipeIndex: Integer;
+begin
+  maxRuntime := StrToInt(Self.MaxRuntimeEdit.Text, 0);
+  bankLocation := Self.BankLocationCombo.ItemIndex;
+  if not InRange(bankLocation, Ord(Low(EBankChunk)), Ord(High(EBankChunk))) then
+    bankLocation := 0;
+
+  recipeIndex := Self.RecipeCombo.ItemIndex;
+  if not InRange(recipeIndex, 0, High(Self.AvailablePotions)) then
+    recipeIndex := 0;
+
+  if Config.Data.Assert('max_runtime', EJSONType.INT) then
+    Config.Data.Item['max_runtime'].AsInt := maxRuntime
+  else
+    Config.Data.AddInt('max_runtime', maxRuntime);
+
+  if Config.Data.Assert('bank_location', EJSONType.INT) then
+    Config.Data.Item['bank_location'].AsInt := bankLocation
+  else
+    Config.Data.AddInt('bank_location', bankLocation);
+
+  if Config.Data.Assert('recipe', EJSONType.INT) then
+    Config.Data.Item['recipe'].AsInt := Ord(Self.AvailablePotions[recipeIndex])
+  else
+    Config.Data.AddInt('recipe', Ord(Self.AvailablePotions[recipeIndex]));
+
+  Config.Save();
+end;
+
+function TPotionMakerForm.GetRecipe(): EPotion;
+begin
+  if Self.AvailablePotions.IsEmpty() then
+    Exit(Low(EPotion));
+  if not InRange(Self.RecipeCombo.ItemIndex, 0, High(Self.AvailablePotions)) then
+    Exit(Self.AvailablePotions.First);
+  Result := Self.AvailablePotions[Self.RecipeCombo.ItemIndex];
+end;
+
+procedure TPotionMakerForm.Setup(caption: String = 'Potion Maker'; configData: TJSONItem = nil);
+begin
+  Self.Form.Setup(caption, configData);
+  Self.CreateSettingsTab();
+  Self.Form.CreateAntibanTab();
+end;
+
+procedure TPotionMakerForm.Run();
+begin
+  Self.Form.Run();
+end;
