@@ -1,19 +1,142 @@
 type
+  EMixPattern = enum(
+    STACK_14_14,
+    STACK_1_27,
+    MANUAL_14_14
+  );
+
+  TPotionRecipe = record
+    Id: String;
+    Name: String;
+    Level: Integer;
+    Primary: String;
+    Secondary: String;
+    Product: String;
+    Pattern: EMixPattern;
+  end;
+
+  TPotionRecipeArray = array of TPotionRecipe;
+
   TPotionMakerForm = record
     Form: TScriptForm;
     MaxRuntimeEdit: TLazEdit;
     BankLocationCombo: TLazComboBox;
     RecipeCombo: TLazComboBox;
-    AvailablePotions: array of EPotion;
+    Recipes: TPotionRecipeArray;
   end;
+
+const
+  MANUAL_MIX_PATTERN: TIntegerArray = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+
+function MixPatternFromString(value: String): EMixPattern;
+begin
+  case value.ToLower() of
+    '14_14', 'stack_14_14': Result := EMixPattern.STACK_14_14;
+    '1_27', 'stack_1_27': Result := EMixPattern.STACK_1_27;
+    'manual_14_14': Result := EMixPattern.MANUAL_14_14;
+    else raise 'Unknown mix pattern: ' + value;
+  end;
+end;
+
+function EMixPattern.PrimaryQty(): Integer;
+begin
+  case Self of
+    EMixPattern.STACK_14_14, EMixPattern.MANUAL_14_14: Result := 14;
+    EMixPattern.STACK_1_27: Result := 1;
+  end;
+end;
+
+function EMixPattern.SecondaryQty(): Integer;
+begin
+  case Self of
+    EMixPattern.STACK_14_14, EMixPattern.MANUAL_14_14: Result := 14;
+    EMixPattern.STACK_1_27: Result := 27;
+  end;
+end;
+
+function EMixPattern.AnchorSlot(): Integer;
+begin
+  case Self of
+    EMixPattern.MANUAL_14_14: Result := 26;
+    else Result := -1;
+  end;
+end;
+
+function EMixPattern.NeedsLayout(): Boolean;
+begin
+  Result := Self = EMixPattern.MANUAL_14_14;
+end;
+
+function TPotionRecipe.FromJSON(item: TJSONItem): TPotionRecipe; static;
+var
+  id, name, primary, secondary, product, pattern: String;
+  level: Integer;
+begin
+  if not item.GetString('id', id) then
+    raise 'Potion recipe missing id';
+  if not item.GetString('name', name) then
+    raise 'Potion recipe missing name';
+  if not item.GetInt('level', level) then
+    raise 'Potion recipe missing level';
+  if not item.GetString('primary', primary) then
+    raise 'Potion recipe missing primary';
+  if not item.GetString('secondary', secondary) then
+    raise 'Potion recipe missing secondary';
+  if not item.GetString('product', product) then
+    raise 'Potion recipe missing product';
+  if not item.GetString('pattern', pattern) then
+    raise 'Potion recipe missing pattern';
+
+  Result.Id := id;
+  Result.Name := name;
+  Result.Level := level;
+  Result.Primary := primary;
+  Result.Secondary := secondary;
+  Result.Product := product;
+  Result.Pattern := MixPatternFromString(pattern);
+end;
+
+function TPotionRecipe.Label(): String;
+begin
+  Result := Format('%s (%d)', [Self.Name, Self.Level]);
+end;
+
+function LoadPotionRecipes(path: String): TPotionRecipeArray;
+var
+  parser: TJSONParser;
+  i: Integer;
+begin
+  Result := [];
+  if not FileExists(path) then
+    raise 'Potion recipes file not found: ' + path;
+
+  parser := new TJSONParser();
+  parser.Load(path);
+
+  for i := 0 to parser.Count - 1 do
+    Result += TPotionRecipe.FromJSON(parser.Item[i]);
+
+  if Result.IsEmpty() then
+    raise 'No potion recipes loaded from: ' + path;
+end;
+
+function IndexOfRecipe(recipes: TPotionRecipeArray; id: String): Integer;
+var
+  i: Integer;
+begin
+  for i := 0 to High(recipes) do
+    if recipes[i].Id = id then
+      Exit(i);
+  Result := -1;
+end;
 
 procedure TPotionMakerForm.CreateSettingsTab();
 var
   tab: TLazTabSheet;
   chunk: EBankChunk;
   bankLocation, recipe: Integer;
-  potion: EPotion;
-  bankLocation, recipe: Integer;
+  recipeId: String;
+  i: Integer;
 begin
   tab := Self.Form.CreateTab('Settings');
 
@@ -40,20 +163,17 @@ begin
   end;
   Self.BankLocationCombo.ItemIndex := bankLocation;
 
-  Self.AvailablePotions := [];
-  for potion := Low(EPotion) to High(EPotion) do
-    Self.AvailablePotions += potion;
-
   Self.RecipeCombo := TLazComboBox.CreateEx(tab, 'Potion recipe', '', 50, 100, 200, 25);
   Self.RecipeCombo.Items.BeginUpdate();
-  for potion in Self.AvailablePotions do
-    Self.RecipeCombo.Items.Add(Format('%s (%d)', [potion.Label(), POTION_LEVEL[potion]]));
+  for i := 0 to High(Self.Recipes) do
+    Self.RecipeCombo.Items.Add(Self.Recipes[i].Label());
   Self.RecipeCombo.Items.EndUpdate();
 
   recipe := 0;
-  if Self.Form.ConfigData.Assert('recipe', EJSONType.INT) then
+  if Self.Form.ConfigData.Assert('recipe', EJSONType.STR) then
   begin
-    recipe := IndexOfPotion(Self.AvailablePotions, EPotion(Self.Form.ConfigData.Item['recipe'].AsInt));
+    recipeId := Self.Form.ConfigData.Item['recipe'].AsString;
+    recipe := IndexOfRecipe(Self.Recipes, recipeId);
     if recipe < 0 then
       recipe := 0;
   end;
@@ -63,6 +183,7 @@ end;
 procedure TPotionMakerForm.SaveSettings(Config: TConfigJSON);
 var
   maxRuntime, bankLocation, recipeIndex: Integer;
+  recipeId: String;
 begin
   maxRuntime := StrToInt(Self.MaxRuntimeEdit.Text, 0);
   bankLocation := Self.BankLocationCombo.ItemIndex;
@@ -70,8 +191,9 @@ begin
     bankLocation := 0;
 
   recipeIndex := Self.RecipeCombo.ItemIndex;
-  if not InRange(recipeIndex, 0, High(Self.AvailablePotions)) then
+  if not InRange(recipeIndex, 0, High(Self.Recipes)) then
     recipeIndex := 0;
+  recipeId := Self.Recipes[recipeIndex].Id;
 
   if Config.Data.Assert('max_runtime', EJSONType.INT) then
     Config.Data.Item['max_runtime'].AsInt := maxRuntime
@@ -83,25 +205,26 @@ begin
   else
     Config.Data.AddInt('bank_location', bankLocation);
 
-  if Config.Data.Assert('recipe', EJSONType.INT) then
-    Config.Data.Item['recipe'].AsInt := Ord(Self.AvailablePotions[recipeIndex])
+  if Config.Data.Assert('recipe', EJSONType.STR) then
+    Config.Data.Item['recipe'].AsString := recipeId
   else
-    Config.Data.AddInt('recipe', Ord(Self.AvailablePotions[recipeIndex]));
+    Config.Data.AddString('recipe', recipeId);
 
   Config.Save();
 end;
 
-function TPotionMakerForm.GetRecipe(): EPotion;
+function TPotionMakerForm.GetRecipe(): TPotionRecipe;
 begin
-  if Self.AvailablePotions.IsEmpty() then
-    Exit(Low(EPotion));
-  if not InRange(Self.RecipeCombo.ItemIndex, 0, High(Self.AvailablePotions)) then
-    Exit(Self.AvailablePotions.First);
-  Result := Self.AvailablePotions[Self.RecipeCombo.ItemIndex];
+  if Self.Recipes.IsEmpty() then
+    raise 'No potion recipes available';
+  if not InRange(Self.RecipeCombo.ItemIndex, 0, High(Self.Recipes)) then
+    Exit(Self.Recipes.First);
+  Result := Self.Recipes[Self.RecipeCombo.ItemIndex];
 end;
 
-procedure TPotionMakerForm.Setup(caption: String = 'Potion Maker'; configData: TJSONItem = nil);
+procedure TPotionMakerForm.Setup(caption: String = 'Potion Maker'; configData: TJSONItem = nil; recipes: TPotionRecipeArray = []);
 begin
+  Self.Recipes := recipes;
   Self.Form.Setup(caption, configData);
   Self.CreateSettingsTab();
   Self.Form.CreateAntibanTab();

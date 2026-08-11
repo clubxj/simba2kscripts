@@ -1,7 +1,6 @@
 //!PACKAGE POTION_MAKER
 {$DEFINE WL_DISABLE_FAKE_INPUT}
 {$I WaspLib/main.simba}
-{$I recipes.simba}
 {$I potion_form.simba}
 
 type
@@ -26,8 +25,8 @@ type
     SkippedPass: Integer;
     MaxRuntime: Integer;
     BankChunk: EBankChunk;
-    Potion: EPotion;
-    PotionLock: TLock;
+    Recipe: TPotionRecipe;
+    RecipeLock: TLock;
     ActionHandlers: array[EAction] of function(): EAction of object;
     Inactivity: TCountDown;
     Runtime: TStopWatch;
@@ -44,23 +43,18 @@ begin
   Self.DebugLn('BankEmpty: %s', [reason]);
 end;
 
-function TBot.GetPotion(): EPotion;
-begin
-  Self.PotionLock.Enter();
-  Result := Self.Potion;
-  Self.PotionLock.Leave();
-end;
-
-procedure TBot.SetPotion(potion: EPotion);
-begin
-  Self.PotionLock.Enter();
-  Self.Potion := potion;
-  Self.PotionLock.Leave();
-end;
-
 function TBot.GetRecipe(): TPotionRecipe;
 begin
-  Result := Self.GetPotion().GetRecipe();
+  Self.RecipeLock.Enter();
+  Result := Self.Recipe;
+  Self.RecipeLock.Leave();
+end;
+
+procedure TBot.SetRecipe(recipe: TPotionRecipe);
+begin
+  Self.RecipeLock.Enter();
+  Self.Recipe := recipe;
+  Self.RecipeLock.Leave();
 end;
 
 function TBot.GetBankItems(): TItemArray;
@@ -89,15 +83,6 @@ begin
   Result := (Self.CountItem(recipe.Primary) > 0) and (Self.CountItem(recipe.Secondary) > 0);
 end;
 
-function TBot.IngredientsReady(): Boolean;
-var
-  recipe: TPotionRecipe;
-begin
-  recipe := Self.GetRecipe();
-  Result := (Self.CountItem(recipe.Primary) >= recipe.Pattern.PrimaryQty()) and
-            (Self.CountItem(recipe.Secondary) >= recipe.Pattern.SecondaryQty());
-end;
-
 function TBot.LayoutReady(): Boolean;
 var
   recipe: TPotionRecipe;
@@ -115,21 +100,19 @@ end;
 
 procedure TBot.OnLevelUp(img: TImage; level: Integer; skill: ESkill);
 var
-  potion: EPotion;
   recipe: TPotionRecipe;
 begin
   if skill <> ESkill.HERBLORE then
     Exit;
 
-  potion := Self.GetPotion();
-  recipe := potion.GetRecipe();
+  recipe := Self.GetRecipe();
   if level < recipe.Level then
   begin
     Self.TerminateReason := 'Herblore too low for selected recipe';
     Exit;
   end;
 
-  Self.DebugLn('Herblore %d — making %s', [level, potion.Label()]);
+  Self.DebugLn('Herblore %d — making %s', [level, recipe.Name]);
 end;
 
 function TBot.Action_Unknown(): EAction;
@@ -442,8 +425,9 @@ begin
       begin
         anchor := recipe.Pattern.AnchorSlot();
         slot := MANUAL_MIX_PATTERN[Self.NextSlot];
+        primary := Inventory.Items.IndicesOf([recipe.Primary]);
 
-        if Inventory.Items.Contains(slot, recipe.Primary) then
+        if primary.Contains(slot) then
         begin
           if Inventory.Combine(slot, anchor) then
             Inc(Self.MixedPass);
@@ -506,25 +490,25 @@ var
   recipe: TPotionRecipe;
 begin
   level := Stats.GetLevel(ESkill.HERBLORE);
-  recipe := Self.GetPotion().GetRecipe();
+  recipe := Self.GetRecipe();
 
   if level < recipe.Level then
     raise 'Herblore level too low for selected recipe.';
 
-  Self.DebugLn('Herblore %d — making %s (%s)', [level, Self.GetPotion().Label(), ToStr(recipe.Pattern)]);
+  Self.DebugLn('Herblore %d — making %s (%s)', [level, recipe.Name, ToStr(recipe.Pattern)]);
 end;
 
-procedure TBot.Setup(Config: TConfigJSON; potion: EPotion);
+procedure TBot.Setup(Config: TConfigJSON; recipe: TPotionRecipe);
 var
   bankLocation: Integer;
 begin
   Logger.Setup('Potion Maker');
   Self.SetupActionHandlers();
 
-  Self.PotionLock := TLock.Create();
-  AddOnTerminate(@Self.PotionLock.Free);
+  Self.RecipeLock := TLock.Create();
+  AddOnTerminate(@Self.RecipeLock.Free);
 
-  Self.SetPotion(potion);
+  Self.SetRecipe(recipe);
 
   Self.MaxRuntime := 0;
   if Config.Data.Assert('max_runtime', EJSONType.INT) then
@@ -598,6 +582,7 @@ var
   Form: TPotionMakerForm;
   BotConfig: TConfigJSON;
   Bot: TBot;
+  Recipes: TPotionRecipeArray;
 
 procedure TScriptForm.OnStart(sender: TLazObject); override;
 begin
@@ -606,8 +591,10 @@ begin
 end;
 
 begin
+  Recipes := LoadPotionRecipes(PathExtractDir(SCRIPT_FILE) + PATH_SEP + 'potion_recipes.json');
+
   BotConfig.Setup('scripts' + PATH_SEP + 'potion-maker');
-  Form.Setup('Potion Maker', BotConfig.Data);
+  Form.Setup('Potion Maker', BotConfig.Data, Recipes);
   Form.Run();
 
   Bot.Setup(BotConfig, Form.GetRecipe());
