@@ -13,7 +13,7 @@ var
   parser: TJSONParser;
   saved: TJSONItem;
   chunk: EBankChunk;
-  path, id: String;
+  path: String;
   i, j, bankLocation: Integer;
 begin
   tab := Self.Form.CreateTab('Settings');
