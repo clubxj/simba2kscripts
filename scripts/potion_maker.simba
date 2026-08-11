@@ -3,6 +3,9 @@
 {$I WaspLib/main.simba}
 {$I potion_form.simba}
 
+const
+  MANUAL_MIX_PATTERN: TIntegerArray = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+
 type
   EAction = enum(
     UNKNOWN,
@@ -23,10 +26,25 @@ type
     NextSlot: Integer;
     MixedPass: Integer;
     SkippedPass: Integer;
+    Actions: Integer;
+    MaxActions: Integer;
     MaxRuntime: Integer;
     BankChunk: EBankChunk;
-    Recipe: TPotionRecipe;
-    RecipeLock: TLock;
+
+    Recipes: TJSONItem;
+    Queue: TStringArray;
+    RecipeIndex: Integer;
+
+    RecipeId: String;
+    Primary: String;
+    Secondary: String;
+    Product: String;
+    Pattern: String;
+    Level: Integer;
+    PrimaryQty: Integer;
+    SecondaryQty: Integer;
+    AnchorSlot: Integer;
+
     ActionHandlers: array[EAction] of function(): EAction of object;
     Inactivity: TCountDown;
     Runtime: TStopWatch;
@@ -43,26 +61,74 @@ begin
   Self.DebugLn('BankEmpty: %s', [reason]);
 end;
 
-function TBot.GetRecipe(): TPotionRecipe;
-begin
-  Self.RecipeLock.Enter();
-  Result := Self.Recipe;
-  Self.RecipeLock.Leave();
-end;
-
-procedure TBot.SetRecipe(recipe: TPotionRecipe);
-begin
-  Self.RecipeLock.Enter();
-  Self.Recipe := recipe;
-  Self.RecipeLock.Leave();
-end;
-
-function TBot.GetBankItems(): TItemArray;
+function TBot.FindRecipe(id: String): TJSONItem;
 var
-  recipe: TPotionRecipe;
+  i: Integer;
 begin
-  recipe := Self.GetRecipe();
-  Result := [recipe.Primary, recipe.Secondary];
+  for i := 0 to Self.Recipes.Count - 1 do
+    if Self.Recipes.Item[i].Item['id'].AsString = id then
+      Exit(Self.Recipes.Item[i]);
+  Result := nil;
+end;
+
+procedure TBot.StartRecipe(index: Integer);
+var
+  item: TJSONItem;
+begin
+  if not InRange(index, 0, High(Self.Queue)) then
+    raise 'No potion recipe selected';
+
+  Self.RecipeIndex := index;
+  item := Self.FindRecipe(Self.Queue[index]);
+  if item = nil then
+    raise 'Unknown potion recipe: ' + Self.Queue[index];
+
+  Self.RecipeId := item.Item['id'].AsString;
+  Self.Level := item.Item['level'].AsInt;
+  Self.Primary := item.Item['primary'].AsString;
+  Self.Secondary := item.Item['secondary'].AsString;
+  Self.Product := item.Item['product'].AsString;
+  Self.Pattern := item.Item['pattern'].AsString;
+  Self.BankEmpty := False;
+  Self.NextSlot := 0;
+  Self.MixedPass := 0;
+  Self.SkippedPass := 0;
+
+  case Self.Pattern of
+    '1_27':
+      begin
+        Self.PrimaryQty := 1;
+        Self.SecondaryQty := 27;
+        Self.AnchorSlot := -1;
+      end;
+    '14_14':
+      begin
+        Self.PrimaryQty := 14;
+        Self.SecondaryQty := 14;
+        Self.AnchorSlot := -1;
+      end;
+    'manual':
+      begin
+        Self.PrimaryQty := 14;
+        Self.SecondaryQty := 14;
+        Self.AnchorSlot := 26;
+      end;
+    else
+      raise 'Unknown mix pattern: ' + Self.Pattern;
+  end;
+
+  Self.DebugLn('Recipe %s — %s + %s -> %s (%s)', [
+    Self.RecipeId, Self.Primary, Self.Secondary, Self.Product, Self.Pattern
+  ]);
+end;
+
+function TBot.NextRecipe(): Boolean;
+begin
+  if Self.RecipeIndex >= High(Self.Queue) then
+    Exit(False);
+
+  Self.StartRecipe(Self.RecipeIndex + 1);
+  Result := True;
 end;
 
 function TBot.CountItem(name: String): Integer;
@@ -76,43 +142,33 @@ begin
 end;
 
 function TBot.HasIngredients(): Boolean;
-var
-  recipe: TPotionRecipe;
 begin
-  recipe := Self.GetRecipe();
-  Result := (Self.CountItem(recipe.Primary) > 0) and (Self.CountItem(recipe.Secondary) > 0);
+  Result := (Self.CountItem(Self.Primary) > 0) and (Self.CountItem(Self.Secondary) > 0);
 end;
 
 function TBot.LayoutReady(): Boolean;
 var
-  recipe: TPotionRecipe;
-  anchor: Integer;
   secondary: TIntegerArray;
 begin
-  recipe := Self.GetRecipe();
-  if not recipe.Pattern.NeedsLayout() then
+  if Self.AnchorSlot < 0 then
     Exit(True);
 
-  anchor := recipe.Pattern.AnchorSlot();
-  secondary := Inventory.Items.IndicesOf([recipe.Secondary]);
-  Result := secondary.Contains(anchor) and (Inventory.Slots.ReadStack(anchor) = 1);
+  secondary := Inventory.Items.IndicesOf([Self.Secondary]);
+  Result := secondary.Contains(Self.AnchorSlot) and (Inventory.Slots.ReadStack(Self.AnchorSlot) = 1);
 end;
 
 procedure TBot.OnLevelUp(img: TImage; level: Integer; skill: ESkill);
-var
-  recipe: TPotionRecipe;
 begin
   if skill <> ESkill.HERBLORE then
     Exit;
 
-  recipe := Self.GetRecipe();
-  if level < recipe.Level then
+  if level < Self.Level then
   begin
-    Self.TerminateReason := 'Herblore too low for selected recipe';
+    Self.TerminateReason := 'Herblore too low for ' + Self.RecipeId;
     Exit;
   end;
 
-  Self.DebugLn('Herblore %d — making %s', [level, recipe.Name]);
+  Self.DebugLn('Herblore %d — making %s', [level, Self.RecipeId]);
 end;
 
 function TBot.Action_Unknown(): EAction;
@@ -148,7 +204,10 @@ begin
 
   if Self.BankEmpty then
   begin
-    Self.TerminateReason := 'No ingredients left in bank';
+    if Self.NextRecipe() then
+      Exit(EAction.OPEN_BANK);
+
+    Self.TerminateReason := 'No ingredients left for remaining recipes';
     Exit(EAction.END_SCRIPT);
   end;
 
@@ -173,7 +232,7 @@ begin
   if Inventory.Slots.CountEmpty() < (28 - Bank.GetLockedSlots().Length) then
     Exit(EAction.DEPOSIT_ITEMS);
 
-  items := Bank.Items.IndicesOf(Self.GetBankItems());
+  items := Bank.Items.IndicesOf([Self.Primary, Self.Secondary]);
 
   if items.IsEmpty() then
     Result := EAction.FIND_INGREDIENTS
@@ -183,13 +242,11 @@ end;
 
 function TBot.Action_WithdrawIngredients(): EAction;
 var
-  recipe: TPotionRecipe;
   needPrimary, needSecondary, empty: Integer;
   slots: TIntegerArray;
 begin
-  recipe := Self.GetRecipe();
-  needPrimary := recipe.Pattern.PrimaryQty() - Self.CountItem(recipe.Primary);
-  needSecondary := recipe.Pattern.SecondaryQty() - Self.CountItem(recipe.Secondary);
+  needPrimary := Self.PrimaryQty - Self.CountItem(Self.Primary);
+  needSecondary := Self.SecondaryQty - Self.CountItem(Self.Secondary);
 
   if (needPrimary <= 0) and (needSecondary <= 0) then
     Exit(EAction.CLOSE_INTERFACE);
@@ -198,16 +255,16 @@ begin
 
   if needPrimary > 0 then
   begin
-    slots := Bank.Items.IndicesOf([recipe.Primary]);
+    slots := Bank.Items.IndicesOf([Self.Primary]);
     if slots.IsEmpty() then
       Exit(EAction.FIND_INGREDIENTS);
 
     if needPrimary > empty then
       needPrimary := empty;
 
-    Self.DebugLn('Withdraw: %s x%d, empty %d', [recipe.Primary, needPrimary, empty]);
+    Self.DebugLn('Withdraw: %s x%d, empty %d', [Self.Primary, needPrimary, empty]);
 
-    if Bank.Withdraw(recipe.Primary.ToBankItem(needPrimary)) then
+    if Bank.Withdraw(Self.Primary.ToBankItem(needPrimary)) then
     begin
       if (needPrimary >= empty) or (needSecondary <= 0) then
         Result := EAction.CLOSE_INTERFACE
@@ -219,16 +276,16 @@ begin
 
   if needSecondary > 0 then
   begin
-    slots := Bank.Items.IndicesOf([recipe.Secondary]);
+    slots := Bank.Items.IndicesOf([Self.Secondary]);
     if slots.IsEmpty() then
       Exit(EAction.FIND_INGREDIENTS);
 
     if needSecondary > empty then
       needSecondary := empty;
 
-    Self.DebugLn('Withdraw: %s x%d, empty %d', [recipe.Secondary, needSecondary, empty]);
+    Self.DebugLn('Withdraw: %s x%d, empty %d', [Self.Secondary, needSecondary, empty]);
 
-    if Bank.Withdraw(recipe.Secondary.ToBankItem(needSecondary)) then
+    if Bank.Withdraw(Self.Secondary.ToBankItem(needSecondary)) then
     begin
       if needSecondary >= empty then
         Result := EAction.CLOSE_INTERFACE
@@ -240,25 +297,22 @@ end;
 
 function TBot.Action_FindIngredients(): EAction;
 var
-  recipe: TPotionRecipe;
   items: TIntegerArray;
   bounds: TBox;
   tab, scroll, next: Integer;
   down: Boolean;
   direction, search: String;
 begin
-  recipe := Self.GetRecipe();
-
-  if Bank.Items.Contains(recipe.Primary) then
-    search := recipe.Primary
-  else if Bank.Items.Contains(recipe.Secondary) then
-    search := recipe.Secondary
+  if Bank.Items.Contains(Self.Primary) then
+    search := Self.Primary
+  else if Bank.Items.Contains(Self.Secondary) then
+    search := Self.Secondary
   else
-    search := recipe.Primary.Before(' potion').Trim();
+    search := Self.Primary.Before(' potion').Trim();
 
   Bank.Search(search);
 
-  items := Bank.Items.IndicesOf(Self.GetBankItems());
+  items := Bank.Items.IndicesOf([Self.Primary, Self.Secondary]);
   if items.IsEmpty() then
   begin
     Self.MarkBankEmpty('search miss');
@@ -281,7 +335,7 @@ begin
   if not Bank.OpenTab(tab) then
     Exit;
 
-  if Bank.Items.ContainsAny(Self.GetBankItems()) then
+  if Bank.Items.ContainsAny([Self.Primary, Self.Secondary]) then
   begin
     Self.DebugLn('FindIngredients: tab %d, visible without scroll', [tab]);
     Exit(EAction.WITHDRAW_INGREDIENTS);
@@ -308,7 +362,7 @@ begin
       next := scroll + 5;
 
     scroll := Bank.Scroll.SetLevel(next);
-    if Bank.Items.ContainsAny(Self.GetBankItems()) then
+    if Bank.Items.ContainsAny([Self.Primary, Self.Secondary]) then
     begin
       Self.DebugLn('FindIngredients: found at scroll %d (%s)', [scroll, direction]);
       Exit(EAction.WITHDRAW_INGREDIENTS);
@@ -331,7 +385,7 @@ begin
       next := scroll + 5;
 
     scroll := Bank.Scroll.SetLevel(next);
-    if Bank.Items.ContainsAny(Self.GetBankItems()) then
+    if Bank.Items.ContainsAny([Self.Primary, Self.Secondary]) then
     begin
       Self.DebugLn('FindIngredients: found at scroll %d (%s)', [scroll, direction]);
       Exit(EAction.WITHDRAW_INGREDIENTS);
@@ -353,20 +407,16 @@ end;
 
 function TBot.Action_PrepLayout(): EAction;
 var
-  recipe: TPotionRecipe;
-  anchor, slot: Integer;
+  slot: Integer;
   secondary: TIntegerArray;
 begin
-  recipe := Self.GetRecipe();
-  anchor := recipe.Pattern.AnchorSlot();
-
   if Self.LayoutReady() then
     Exit(EAction.MIX_POTIONS);
 
-  secondary := Inventory.Items.IndicesOf([recipe.Secondary]);
+  secondary := Inventory.Items.IndicesOf([Self.Secondary]);
   for slot in secondary do
   begin
-    if slot = anchor then
+    if slot = Self.AnchorSlot then
       Continue;
 
     if Inventory.Slots.ReadStack(slot) <= 1 then
@@ -374,8 +424,8 @@ begin
 
     Inventory.Slots.Click(slot, EMouseButton.LEFT);
     Sleep(0, TICK, ERandomDir.LEFT);
-    Inventory.Slots.Click(anchor, EMouseButton.LEFT);
-    Self.DebugLn('PrepLayout: moved 1 %s to slot %d', [recipe.Secondary, anchor]);
+    Inventory.Slots.Click(Self.AnchorSlot, EMouseButton.LEFT);
+    Self.DebugLn('PrepLayout: moved 1 %s to slot %d', [Self.Secondary, Self.AnchorSlot]);
     Exit(EAction.PREP_LAYOUT);
   end;
 
@@ -384,53 +434,58 @@ end;
 
 function TBot.Action_MixPotions(): EAction;
 var
-  recipe: TPotionRecipe;
-  anchor, slot, oneSlot, manySlot: Integer;
+  slot, oneSlot, manySlot: Integer;
   primary, secondary: TIntegerArray;
 begin
-  recipe := Self.GetRecipe();
-
-  case recipe.Pattern of
-    EMixPattern.STACK_14_14:
+  case Self.Pattern of
+    '14_14':
       begin
-        if Inventory.Combine(recipe.Primary, recipe.Secondary) then
-          Self.DebugLn('Mix: 14+14 %s', [recipe.Product]);
+        if Inventory.Combine(Self.Primary, Self.Secondary) then
+        begin
+          Inc(Self.Actions);
+          Self.DebugLn('Mix: 14+14 %s', [Self.Product]);
+        end;
         Exit(EAction.OPEN_BANK);
       end;
 
-    EMixPattern.STACK_1_27:
+    '1_27':
       begin
         oneSlot := -1;
         manySlot := -1;
-        primary := Inventory.Items.IndicesOf([recipe.Primary]);
-        secondary := Inventory.Items.IndicesOf([recipe.Secondary]);
+        primary := Inventory.Items.IndicesOf([Self.Primary]);
+        secondary := Inventory.Items.IndicesOf([Self.Secondary]);
 
         for slot in primary do
           if Inventory.Slots.ReadStack(slot) = 1 then
             oneSlot := slot;
 
         for slot in secondary do
-          if Inventory.Slots.ReadStack(slot) >= recipe.Pattern.SecondaryQty() then
+          if Inventory.Slots.ReadStack(slot) >= Self.SecondaryQty then
             manySlot := slot;
 
         if (oneSlot = -1) or (manySlot = -1) then
           Exit(EAction.OPEN_BANK);
 
         if Inventory.Combine(oneSlot, manySlot) then
-          Self.DebugLn('Mix: 1+27 %s', [recipe.Product]);
+        begin
+          Inc(Self.Actions);
+          Self.DebugLn('Mix: 1+27 %s', [Self.Product]);
+        end;
         Exit(EAction.OPEN_BANK);
       end;
 
-    EMixPattern.MANUAL_14_14:
+    'manual':
       begin
-        anchor := recipe.Pattern.AnchorSlot();
         slot := MANUAL_MIX_PATTERN[Self.NextSlot];
-        primary := Inventory.Items.IndicesOf([recipe.Primary]);
+        primary := Inventory.Items.IndicesOf([Self.Primary]);
 
         if primary.Contains(slot) then
         begin
-          if Inventory.Combine(slot, anchor) then
+          if Inventory.Combine(slot, Self.AnchorSlot) then
+          begin
             Inc(Self.MixedPass);
+            Inc(Self.Actions);
+          end;
         end
         else
           Inc(Self.SkippedPass);
@@ -447,7 +502,10 @@ begin
 
           if Self.BankEmpty then
           begin
-            Self.TerminateReason := 'No ingredients left in bank';
+            if Self.NextRecipe() then
+              Exit(EAction.OPEN_BANK);
+
+            Self.TerminateReason := 'No ingredients left for remaining recipes';
             Exit(EAction.END_SCRIPT);
           end;
 
@@ -484,43 +542,36 @@ begin
   Self.ActionHandlers[EAction.END_SCRIPT] := @Self.Action_EndScript;
 end;
 
-procedure TBot.SetupRecipe();
+procedure TBot.Setup(Config: TConfigJSON; potions: TStringArray);
 var
+  path: String;
+  parser: TJSONParser;
   level: Integer;
-  recipe: TPotionRecipe;
-begin
-  level := Stats.GetLevel(ESkill.HERBLORE);
-  recipe := Self.GetRecipe();
-
-  if level < recipe.Level then
-    raise 'Herblore level too low for selected recipe.';
-
-  Self.DebugLn('Herblore %d — making %s (%s)', [level, recipe.Name, ToStr(recipe.Pattern)]);
-end;
-
-procedure TBot.Setup(Config: TConfigJSON; recipe: TPotionRecipe);
-var
-  bankLocation: Integer;
 begin
   Logger.Setup('Potion Maker');
   Self.SetupActionHandlers();
 
-  Self.RecipeLock := TLock.Create();
-  AddOnTerminate(@Self.RecipeLock.Free);
+  path := PathExtractDir(SCRIPT_FILE) + PATH_SEP + 'potion_recipes.json';
+  parser := new TJSONParser();
+  parser.Load(path);
+  Self.Recipes := parser;
 
-  Self.SetRecipe(recipe);
+  Self.Queue := potions;
+  if Self.Queue.IsEmpty() then
+    raise 'Select at least one potion to make.';
 
   Self.MaxRuntime := 0;
   if Config.Data.Assert('max_runtime', EJSONType.INT) then
     Self.MaxRuntime := Config.Data.Item['max_runtime'].AsInt;
 
-  Self.BankChunk := Low(EBankChunk);
+  Self.MaxActions := 0;
+  if Config.Data.Assert('max_actions', EJSONType.INT) then
+    Self.MaxActions := Config.Data.Item['max_actions'].AsInt;
+
+  Self.BankChunk := EBankChunk.EDGEVILLE;
   if Config.Data.Assert('bank_location', EJSONType.INT) then
-  begin
-    bankLocation := Config.Data.Item['bank_location'].AsInt;
-    if InRange(bankLocation, Ord(Low(EBankChunk)), Ord(High(EBankChunk))) then
-      Self.BankChunk := EBankChunk(bankLocation);
-  end;
+    if InRange(Config.Data.Item['bank_location'].AsInt, Ord(Low(EBankChunk)), Ord(High(EBankChunk))) then
+      Self.BankChunk := EBankChunk(Config.Data.Item['bank_location'].AsInt);
 
   Map.Setup([Self.BankChunk.Get()]);
   Self.DebugLn('Map setup for bank chunk %s', [ToStr(Self.BankChunk)]);
@@ -529,7 +580,11 @@ begin
     if not Login.DoLogin() then
       raise 'Failed to login player.';
 
-  Self.SetupRecipe();
+  Self.StartRecipe(0);
+
+  level := Stats.GetLevel(ESkill.HERBLORE);
+  if level < Self.Level then
+    raise 'Herblore level too low for ' + Self.RecipeId;
 
   StartListeners(300);
   LevelUpListener.OnLevelUp += @Self.OnLevelUp;
@@ -554,6 +609,12 @@ begin
     if (Self.MaxRuntime > 0) and (Self.Runtime.Elapsed >= Self.MaxRuntime * MINUTE) then
     begin
       Self.TerminateReason := 'Max runtime reached';
+      Break;
+    end;
+
+    if (Self.MaxActions > 0) and (Self.Actions >= Self.MaxActions) then
+    begin
+      Self.TerminateReason := 'Max actions reached';
       Break;
     end;
 
@@ -582,7 +643,6 @@ var
   Form: TPotionMakerForm;
   BotConfig: TConfigJSON;
   Bot: TBot;
-  Recipes: TPotionRecipeArray;
 
 procedure TScriptForm.OnStart(sender: TLazObject); override;
 begin
@@ -591,12 +651,10 @@ begin
 end;
 
 begin
-  Recipes := LoadPotionRecipes(PathExtractDir(SCRIPT_FILE) + PATH_SEP + 'potion_recipes.json');
-
   BotConfig.Setup('scripts' + PATH_SEP + 'potion-maker');
-  Form.Setup('Potion Maker', BotConfig.Data, Recipes);
+  Form.Setup('Potion Maker', BotConfig.Data);
   Form.Run();
 
-  Bot.Setup(BotConfig, Form.GetRecipe());
+  Bot.Setup(BotConfig, Form.GetSelectedPotions());
   Bot.Run();
 end.

@@ -1,254 +1,30 @@
 [
-	{
-		"id": "guam_unf",
-		"name": "Guam (unf)",
-		"level": 3,
-		"primary": "Guam leaf",
-		"secondary": "Vial of water",
-		"product": "Guam potion (unf)",
-		"pattern": "1_27"
-	},
-	{
-		"id": "marrentill_unf",
-		"name": "Marrentill (unf)",
-		"level": 5,
-		"primary": "Marrentill",
-		"secondary": "Vial of water",
-		"product": "Marrentill potion (unf)",
-		"pattern": "1_27"
-	},
-	{
-		"id": "tarromin_unf",
-		"name": "Tarromin (unf)",
-		"level": 11,
-		"primary": "Tarromin",
-		"secondary": "Vial of water",
-		"product": "Tarromin potion (unf)",
-		"pattern": "1_27"
-	},
-	{
-		"id": "harralander_unf",
-		"name": "Harralander (unf)",
-		"level": 20,
-		"primary": "Harralander",
-		"secondary": "Vial of water",
-		"product": "Harralander potion (unf)",
-		"pattern": "1_27"
-	},
-	{
-		"id": "ranarr_unf",
-		"name": "Ranarr (unf)",
-		"level": 25,
-		"primary": "Ranarr weed",
-		"secondary": "Vial of water",
-		"product": "Ranarr potion (unf)",
-		"pattern": "1_27"
-	},
-	{
-		"id": "toadflax_unf",
-		"name": "Toadflax (unf)",
-		"level": 30,
-		"primary": "Toadflax",
-		"secondary": "Vial of water",
-		"product": "Toadflax potion (unf)",
-		"pattern": "1_27"
-	},
-	{
-		"id": "irit_unf",
-		"name": "Irit (unf)",
-		"level": 40,
-		"primary": "Irit leaf",
-		"secondary": "Vial of water",
-		"product": "Irit potion (unf)",
-		"pattern": "1_27"
-	},
-	{
-		"id": "avantoe_unf",
-		"name": "Avantoe (unf)",
-		"level": 48,
-		"primary": "Avantoe",
-		"secondary": "Vial of water",
-		"product": "Avantoe potion (unf)",
-		"pattern": "1_27"
-	},
-	{
-		"id": "kwuarm_unf",
-		"name": "Kwuarm (unf)",
-		"level": 54,
-		"primary": "Kwuarm",
-		"secondary": "Vial of water",
-		"product": "Kwuarm potion (unf)",
-		"pattern": "1_27"
-	},
-	{
-		"id": "snapdragon_unf",
-		"name": "Snapdragon (unf)",
-		"level": 59,
-		"primary": "Snapdragon",
-		"secondary": "Vial of water",
-		"product": "Snapdragon potion (unf)",
-		"pattern": "1_27"
-	},
-	{
-		"id": "cadantine_unf",
-		"name": "Cadantine (unf)",
-		"level": 65,
-		"primary": "Cadantine",
-		"secondary": "Vial of water",
-		"product": "Cadantine potion (unf)",
-		"pattern": "1_27"
-	},
-	{
-		"id": "lantadyme_unf",
-		"name": "Lantadyme (unf)",
-		"level": 67,
-		"primary": "Lantadyme",
-		"secondary": "Vial of water",
-		"product": "Lantadyme potion (unf)",
-		"pattern": "1_27"
-	},
-	{
-		"id": "dwarf_weed_unf",
-		"name": "Dwarf weed (unf)",
-		"level": 70,
-		"primary": "Dwarf weed",
-		"secondary": "Vial of water",
-		"product": "Dwarf weed potion (unf)",
-		"pattern": "1_27"
-	},
-	{
-		"id": "torstol_unf",
-		"name": "Torstol (unf)",
-		"level": 75,
-		"primary": "Torstol",
-		"secondary": "Vial of water",
-		"product": "Torstol potion (unf)",
-		"pattern": "1_27"
-	},
-	{
-		"id": "attack",
-		"name": "Attack potion",
-		"level": 3,
-		"primary": "Guam potion (unf)",
-		"secondary": "Eye of newt",
-		"product": "Attack potion(3)",
-		"pattern": "14_14"
-	},
-	{
-		"id": "antipoison",
-		"name": "Antipoison",
-		"level": 5,
-		"primary": "Marrentill potion (unf)",
-		"secondary": "Unicorn horn dust",
-		"product": "Antipoison(3)",
-		"pattern": "14_14"
-	},
-	{
-		"id": "strength",
-		"name": "Strength potion",
-		"level": 12,
-		"primary": "Tarromin potion (unf)",
-		"secondary": "Limpwurt root",
-		"product": "Strength potion(3)",
-		"pattern": "14_14"
-	},
-	{
-		"id": "restore",
-		"name": "Restore potion",
-		"level": 22,
-		"primary": "Harralander potion (unf)",
-		"secondary": "Red spiders' eggs",
-		"product": "Restore potion(3)",
-		"pattern": "manual_14_14"
-	},
-	{
-		"id": "prayer",
-		"name": "Prayer potion",
-		"level": 38,
-		"primary": "Ranarr potion (unf)",
-		"secondary": "Snape grass",
-		"product": "Prayer potion(3)",
-		"pattern": "manual_14_14"
-	},
-	{
-		"id": "super_attack",
-		"name": "Super attack",
-		"level": 45,
-		"primary": "Irit potion (unf)",
-		"secondary": "Eye of newt",
-		"product": "Super attack(3)",
-		"pattern": "manual_14_14"
-	},
-	{
-		"id": "super_antipoison",
-		"name": "Superantipoison",
-		"level": 48,
-		"primary": "Irit potion (unf)",
-		"secondary": "Unicorn horn dust",
-		"product": "Superantipoison(3)",
-		"pattern": "manual_14_14"
-	},
-	{
-		"id": "super_energy",
-		"name": "Super energy",
-		"level": 52,
-		"primary": "Avantoe potion (unf)",
-		"secondary": "Mort myre fungus",
-		"product": "Super energy(3)",
-		"pattern": "manual_14_14"
-	},
-	{
-		"id": "super_strength",
-		"name": "Super strength",
-		"level": 55,
-		"primary": "Kwuarm potion (unf)",
-		"secondary": "Limpwurt root",
-		"product": "Super strength(3)",
-		"pattern": "manual_14_14"
-	},
-	{
-		"id": "super_restore",
-		"name": "Super restore",
-		"level": 63,
-		"primary": "Snapdragon potion (unf)",
-		"secondary": "Red spiders' eggs",
-		"product": "Super restore(3)",
-		"pattern": "manual_14_14"
-	},
-	{
-		"id": "super_defence",
-		"name": "Super defence",
-		"level": 66,
-		"primary": "Cadantine potion (unf)",
-		"secondary": "White berries",
-		"product": "Super defence(3)",
-		"pattern": "manual_14_14"
-	},
-	{
-		"id": "antifire",
-		"name": "Antifire potion",
-		"level": 69,
-		"primary": "Lantadyme potion (unf)",
-		"secondary": "Dragon scale dust",
-		"product": "Antifire potion(3)",
-		"pattern": "manual_14_14"
-	},
-	{
-		"id": "ranging",
-		"name": "Ranging potion",
-		"level": 72,
-		"primary": "Dwarf weed potion (unf)",
-		"secondary": "Wine of zamorak",
-		"product": "Ranging potion(3)",
-		"pattern": "manual_14_14"
-	},
-	{
-		"id": "magic",
-		"name": "Magic potion",
-		"level": 76,
-		"primary": "Lantadyme potion (unf)",
-		"secondary": "Potato cactus",
-		"product": "Magic potion(3)",
-		"pattern": "manual_14_14"
-	}
+	{"id": "guam_unf", "level": 3, "primary": "Guam leaf", "secondary": "Vial of water", "product": "Guam potion (unf)", "pattern": "1_27"},
+	{"id": "marrentill_unf", "level": 5, "primary": "Marrentill", "secondary": "Vial of water", "product": "Marrentill potion (unf)", "pattern": "1_27"},
+	{"id": "tarromin_unf", "level": 11, "primary": "Tarromin", "secondary": "Vial of water", "product": "Tarromin potion (unf)", "pattern": "1_27"},
+	{"id": "harralander_unf", "level": 20, "primary": "Harralander", "secondary": "Vial of water", "product": "Harralander potion (unf)", "pattern": "1_27"},
+	{"id": "ranarr_unf", "level": 25, "primary": "Ranarr weed", "secondary": "Vial of water", "product": "Ranarr potion (unf)", "pattern": "1_27"},
+	{"id": "toadflax_unf", "level": 30, "primary": "Toadflax", "secondary": "Vial of water", "product": "Toadflax potion (unf)", "pattern": "1_27"},
+	{"id": "irit_unf", "level": 40, "primary": "Irit leaf", "secondary": "Vial of water", "product": "Irit potion (unf)", "pattern": "1_27"},
+	{"id": "avantoe_unf", "level": 48, "primary": "Avantoe", "secondary": "Vial of water", "product": "Avantoe potion (unf)", "pattern": "1_27"},
+	{"id": "kwuarm_unf", "level": 54, "primary": "Kwuarm", "secondary": "Vial of water", "product": "Kwuarm potion (unf)", "pattern": "1_27"},
+	{"id": "snapdragon_unf", "level": 59, "primary": "Snapdragon", "secondary": "Vial of water", "product": "Snapdragon potion (unf)", "pattern": "1_27"},
+	{"id": "cadantine_unf", "level": 65, "primary": "Cadantine", "secondary": "Vial of water", "product": "Cadantine potion (unf)", "pattern": "1_27"},
+	{"id": "lantadyme_unf", "level": 67, "primary": "Lantadyme", "secondary": "Vial of water", "product": "Lantadyme potion (unf)", "pattern": "1_27"},
+	{"id": "dwarf_weed_unf", "level": 70, "primary": "Dwarf weed", "secondary": "Vial of water", "product": "Dwarf weed potion (unf)", "pattern": "1_27"},
+	{"id": "torstol_unf", "level": 75, "primary": "Torstol", "secondary": "Vial of water", "product": "Torstol potion (unf)", "pattern": "1_27"},
+	{"id": "attack", "level": 3, "primary": "Guam potion (unf)", "secondary": "Eye of newt", "product": "Attack potion(3)", "pattern": "14_14"},
+	{"id": "antipoison", "level": 5, "primary": "Marrentill potion (unf)", "secondary": "Unicorn horn dust", "product": "Antipoison(3)", "pattern": "14_14"},
+	{"id": "strength", "level": 12, "primary": "Tarromin potion (unf)", "secondary": "Limpwurt root", "product": "Strength potion(3)", "pattern": "14_14"},
+	{"id": "restore", "level": 22, "primary": "Harralander potion (unf)", "secondary": "Red spiders' eggs", "product": "Restore potion(3)", "pattern": "manual"},
+	{"id": "prayer", "level": 38, "primary": "Ranarr potion (unf)", "secondary": "Snape grass", "product": "Prayer potion(3)", "pattern": "manual"},
+	{"id": "super_attack", "level": 45, "primary": "Irit potion (unf)", "secondary": "Eye of newt", "product": "Super attack(3)", "pattern": "manual"},
+	{"id": "super_antipoison", "level": 48, "primary": "Irit potion (unf)", "secondary": "Unicorn horn dust", "product": "Superantipoison(3)", "pattern": "manual"},
+	{"id": "super_energy", "level": 52, "primary": "Avantoe potion (unf)", "secondary": "Mort myre fungus", "product": "Super energy(3)", "pattern": "manual"},
+	{"id": "super_strength", "level": 55, "primary": "Kwuarm potion (unf)", "secondary": "Limpwurt root", "product": "Super strength(3)", "pattern": "manual"},
+	{"id": "super_restore", "level": 63, "primary": "Snapdragon potion (unf)", "secondary": "Red spiders' eggs", "product": "Super restore(3)", "pattern": "manual"},
+	{"id": "super_defence", "level": 66, "primary": "Cadantine potion (unf)", "secondary": "White berries", "product": "Super defence(3)", "pattern": "manual"},
+	{"id": "antifire", "level": 69, "primary": "Lantadyme potion (unf)", "secondary": "Dragon scale dust", "product": "Antifire potion(3)", "pattern": "manual"},
+	{"id": "ranging", "level": 72, "primary": "Dwarf weed potion (unf)", "secondary": "Wine of zamorak", "product": "Ranging potion(3)", "pattern": "manual"},
+	{"id": "magic", "level": 76, "primary": "Lantadyme potion (unf)", "secondary": "Potato cactus", "product": "Magic potion(3)", "pattern": "manual"}
 ]
