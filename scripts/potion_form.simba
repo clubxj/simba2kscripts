@@ -3,8 +3,8 @@ type
     Form: TScriptForm;
     MaxRuntimeEdit: TLazEdit;
     MaxActionsEdit: TLazEdit;
+    BankLocationCombo: TLazComboBox;
     PotionList: TLazCheckListBox;
-    RecipeIds: TStringArray;
   end;
 
 procedure TPotionMakerForm.CreateSettingsTab();
@@ -12,8 +12,9 @@ var
   tab: TLazTabSheet;
   parser: TJSONParser;
   saved: TJSONItem;
+  chunk: EBankChunk;
   path, id: String;
-  i, j: Integer;
+  i, j, bankLocation: Integer;
 begin
   tab := Self.Form.CreateTab('Settings');
 
@@ -29,38 +30,53 @@ begin
   else
     Self.MaxActionsEdit.Text := '0';
 
+  Self.BankLocationCombo := TLazComboBox.CreateEx(tab, 'Bank location', '', 50, 100, 200, 25);
+  Self.BankLocationCombo.Items.BeginUpdate();
+  for chunk := Low(EBankChunk) to High(EBankChunk) do
+    Self.BankLocationCombo.Items.Add(
+      ToStr(chunk).After('.').Replace('_', ' ').ToLower().Capitalize()
+    );
+  Self.BankLocationCombo.Items.EndUpdate();
+
+  bankLocation := 0;
+  if Self.Form.ConfigData.Assert('bank_location', EJSONType.INT) then
+  begin
+    bankLocation := Self.Form.ConfigData.Item['bank_location'].AsInt;
+    if not InRange(bankLocation, Ord(Low(EBankChunk)), Ord(High(EBankChunk))) then
+      bankLocation := 0;
+  end;
+  Self.BankLocationCombo.ItemIndex := bankLocation;
+
   path := PathExtractDir(SCRIPT_FILE) + PATH_SEP + 'potion_recipes.json';
   parser := new TJSONParser();
   parser.Load(path);
 
-  Self.RecipeIds := [];
-  Self.PotionList := TLazCheckListBox.CreateEx(tab, 'Potions to make', '', 50, 100, 220, 280);
+  Self.PotionList := TLazCheckListBox.CreateEx(tab, 'Potions to make', '', 50, 140, 220, 280);
   Self.PotionList.Items.BeginUpdate();
   for i := 0 to parser.Count - 1 do
-  begin
-    id := parser.Item[i].Item['id'].AsString;
-    Self.RecipeIds += id;
-    Self.PotionList.Items.Add(id.Replace('_', ' '));
-  end;
+    Self.PotionList.Items.Add(parser.Item[i].Item['id'].AsString);
   Self.PotionList.Items.EndUpdate();
 
   if Self.Form.ConfigData.Assert('potions', EJSONType.ARR) then
   begin
     saved := Self.Form.ConfigData.Item['potions'];
-    for i := 0 to High(Self.RecipeIds) do
+    for i := 0 to Self.PotionList.Items.Count - 1 do
       for j := 0 to saved.Count - 1 do
-        if saved.Item[j].AsString = Self.RecipeIds[i] then
+        if saved.Item[j].AsString = Self.PotionList.Items[i] then
           Self.PotionList.Checked[i] := True;
   end;
 end;
 
 procedure TPotionMakerForm.SaveSettings(Config: TConfigJSON);
 var
-  maxRuntime, maxActions, i: Integer;
+  maxRuntime, maxActions, bankLocation, i: Integer;
   potions: TJSONArray;
 begin
   maxRuntime := StrToInt(Self.MaxRuntimeEdit.Text, 0);
   maxActions := StrToInt(Self.MaxActionsEdit.Text, 0);
+  bankLocation := Self.BankLocationCombo.ItemIndex;
+  if not InRange(bankLocation, Ord(Low(EBankChunk)), Ord(High(EBankChunk))) then
+    bankLocation := 0;
 
   if Config.Data.Assert('max_runtime', EJSONType.INT) then
     Config.Data.Item['max_runtime'].AsInt := maxRuntime
@@ -72,13 +88,18 @@ begin
   else
     Config.Data.AddInt('max_actions', maxActions);
 
+  if Config.Data.Assert('bank_location', EJSONType.INT) then
+    Config.Data.Item['bank_location'].AsInt := bankLocation
+  else
+    Config.Data.AddInt('bank_location', bankLocation);
+
   if Config.Data.Has('potions') then
     Config.Data.Delete(Config.Data.Item['potions']);
 
   potions := new TJSONArray();
-  for i := 0 to High(Self.RecipeIds) do
+  for i := 0 to Self.PotionList.Items.Count - 1 do
     if Self.PotionList.Checked[i] then
-      potions.AddString('potion', Self.RecipeIds[i]);
+      potions.AddString('potion', Self.PotionList.Items[i]);
   Config.Data.AddArray('potions', potions);
 
   Config.Save();
@@ -89,9 +110,9 @@ var
   i: Integer;
 begin
   Result := [];
-  for i := 0 to High(Self.RecipeIds) do
+  for i := 0 to Self.PotionList.Items.Count - 1 do
     if Self.PotionList.Checked[i] then
-      Result += Self.RecipeIds[i];
+      Result += Self.PotionList.Items[i];
 end;
 
 procedure TPotionMakerForm.Setup(caption: String = 'Potion Maker'; configData: TJSONItem = nil);

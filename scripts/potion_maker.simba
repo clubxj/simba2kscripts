@@ -31,7 +31,6 @@ type
     MaxRuntime: Integer;
     BankChunk: EBankChunk;
 
-    Recipes: TJSONItem;
     Queue: TStringArray;
     RecipeIndex: Integer;
 
@@ -61,27 +60,33 @@ begin
   Self.DebugLn('BankEmpty: %s', [reason]);
 end;
 
-function TBot.FindRecipe(id: String): TJSONItem;
-var
-  i: Integer;
-begin
-  for i := 0 to Self.Recipes.Count - 1 do
-    if Self.Recipes.Item[i].Item['id'].AsString = id then
-      Exit(Self.Recipes.Item[i]);
-  Result := nil;
-end;
-
 procedure TBot.StartRecipe(index: Integer);
 var
+  parser: TJSONParser;
   item: TJSONItem;
+  path, id: String;
+  i: Integer;
 begin
   if not InRange(index, 0, High(Self.Queue)) then
     raise 'No potion recipe selected';
 
   Self.RecipeIndex := index;
-  item := Self.FindRecipe(Self.Queue[index]);
+  id := Self.Queue[index];
+  path := PathExtractDir(SCRIPT_FILE) + PATH_SEP + 'potion_recipes.json';
+
+  parser := new TJSONParser();
+  parser.Load(path);
+
+  item := nil;
+  for i := 0 to parser.Count - 1 do
+    if parser.Item[i].Item['id'].AsString = id then
+    begin
+      item := parser.Item[i];
+      Break;
+    end;
+
   if item = nil then
-    raise 'Unknown potion recipe: ' + Self.Queue[index];
+    raise 'Unknown potion recipe: ' + id;
 
   Self.RecipeId := item.Item['id'].AsString;
   Self.Level := item.Item['level'].AsInt;
@@ -544,17 +549,10 @@ end;
 
 procedure TBot.Setup(Config: TConfigJSON; potions: TStringArray);
 var
-  path: String;
-  parser: TJSONParser;
-  level: Integer;
+  bankLocation, level: Integer;
 begin
   Logger.Setup('Potion Maker');
   Self.SetupActionHandlers();
-
-  path := PathExtractDir(SCRIPT_FILE) + PATH_SEP + 'potion_recipes.json';
-  parser := new TJSONParser();
-  parser.Load(path);
-  Self.Recipes := parser;
 
   Self.Queue := potions;
   if Self.Queue.IsEmpty() then
@@ -568,10 +566,13 @@ begin
   if Config.Data.Assert('max_actions', EJSONType.INT) then
     Self.MaxActions := Config.Data.Item['max_actions'].AsInt;
 
-  Self.BankChunk := EBankChunk.EDGEVILLE;
+  Self.BankChunk := Low(EBankChunk);
   if Config.Data.Assert('bank_location', EJSONType.INT) then
-    if InRange(Config.Data.Item['bank_location'].AsInt, Ord(Low(EBankChunk)), Ord(High(EBankChunk))) then
-      Self.BankChunk := EBankChunk(Config.Data.Item['bank_location'].AsInt);
+  begin
+    bankLocation := Config.Data.Item['bank_location'].AsInt;
+    if InRange(bankLocation, Ord(Low(EBankChunk)), Ord(High(EBankChunk))) then
+      Self.BankChunk := EBankChunk(bankLocation);
+  end;
 
   Map.Setup([Self.BankChunk.Get()]);
   Self.DebugLn('Map setup for bank chunk %s', [ToStr(Self.BankChunk)]);
